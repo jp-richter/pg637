@@ -15,7 +15,7 @@ Dafür transformieren wir die Bilder aus ihrer ursprünglichen zwei-dimensionale
 eindimensionalen Vektoren (1x784).
 Dann definieren wir ein Netz das Inputvektoren dieser Größe bekommt und einen Vektor mit 10 Werten ausgibt.
 Diese Werte sind die Wahrscheinlichkeiten, mit denen das Netz die entsprechenden Labels für die Eingabe vergibt.
-D. h. ist der Wert an der 0. Stelle im Ausgabevektor eine 0.7 denkt das Netz, dass die Eingabe zu 70% eine 0 ist.
+D. h. ist der Wert an der 0. Stelle im Ausgabevektor eine 0.7, denkt das Netz, dass die Eingabe zu 70% eine 0 ist.
 
 mnist.py enthält eine Implementierung eines kleinen Netzes, einer train-loop für das Netz und 
 eine kleine Inferenz Demo des fertigen Netzes. Die spannenden Teile des Codes habe ich kommentiert, sodass hoffentlich verständlich wird, was passiert.
@@ -61,3 +61,7 @@ torch.Size([1, 5])
 >>> a.shape
 torch.Size([5])
 ```
+
+Generell ist es ein sehr häufiges Problem, das Tensoren die falsche Form (Shape) haben.
+Sich zu Debug-Zwecken die Shape eines Tensor auszugeben hilft sehr dabei zu verstehen, was eurer Programm gerade tut. So können nervige Bugs und Logikfehler oft wesentlich schneller gefunden werden.
+Also haut ab und zu mal ein `print(my_tensor.shape)` in euren Code :)
