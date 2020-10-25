@@ -108,3 +108,14 @@ def move(direction, source_id):
         raise ValueError('Something went horribly wrong!')
 
     return target_id, 0
+
+def prettyprint(values):
+    print('\n----------------------')
+
+    for i, val in enumerate(values):
+        if i % 6 == 0 and not i == 0:
+            print('\n')
+
+        print("| {:4d} |".format(val), end='')
+
+    print('\n----------------------')
