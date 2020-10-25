@@ -2,7 +2,6 @@ position_ids = [i for i in range(36)]
 field_length = 6
 
 INVALID_PID = -1
-FINISHED = -2
 
 def left(position_id):
     if position_id % field_length > 0:
@@ -49,10 +48,10 @@ labyrinth = {
     5: ['left'],
 
     6: ['up', 'down'],
-    7: ['up'],
-    8: ['up', 'down'],
-    9: ['up', 'down'],
-    10: ['right', 'down'],
+    7: ['right', 'up'],
+    8: ['left', 'up', 'down'],
+    9: ['right', 'up', 'down'],
+    10: ['left', 'right', 'down'],
     11: ['left'],
 
     12: ['up', 'down'],
@@ -63,17 +62,17 @@ labyrinth = {
     17: ['down'],
 
     18: ['right', 'up'],
-    19: ['left', 'right', 'up'],
+    19: ['left', 'right', 'up', 'down'],
     20: ['left', 'down'],
     21: ['right', 'up'],
-    22: ['left', 'up'],
+    22: ['left', 'up', 'down'],
     23: ['up', 'down'],
 
     24: ['right'],
-    25: ['left', 'down'],
+    25: ['left', 'up', 'down'],
     26: ['up', 'down'],
     27: ['right'],
-    28: ['left', 'right'],
+    28: ['left', 'up', 'right'],
     29: ['left', 'up', 'down'],
 
     30: ['right'],
@@ -81,21 +80,25 @@ labyrinth = {
     32: ['left', 'right', 'up'],
     33: ['left', 'right'],
     34: ['left', 'right'],
-    35: ['left', 'up'],
-
-    FINISHED: []
+    35: ['left', 'up']
 }
 
 assert not any(next_position_functions[d](wpid) == INVALID_PID for (wpid, directions) in labyrinth.items() for d in directions)
 
 entry_id = 24
-exit_id = 11
-trap_id = 5
+exit_id = 2  # 11
+trap_id = 17
 
 def get_valid_directions(position_id):
     return labyrinth[position_id]
 
 def move(direction, source_id):
+    if source_id == exit_id:
+        return source_id, 1
+
+    if source_id == trap_id:
+        return source_id, -1
+
     if direction not in get_valid_directions(source_id):
         return source_id, 0
 
@@ -104,7 +107,4 @@ def move(direction, source_id):
     if target_id == INVALID_PID:
         raise ValueError('Something went horribly wrong!')
 
-    success, target_id = (1, FINISHED) if target_id == exit_id else (0, target_id)
-    failure, target_id = (-1, FINISHED) if target_id == trap_id else (0, target_id)
-
-    return target_id, (success + failure)
+    return target_id, 0

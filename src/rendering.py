@@ -1,5 +1,7 @@
 import pygame
 import pygame.draw
+import pygame.freetype
+import pygame.font
 import environment
 
 WHITE = (255, 255, 255)
@@ -17,6 +19,8 @@ pygame.display.set_caption('Labyrinth PG637')
 
 screen = pygame.display.set_mode(map_size)
 surface = pygame.Surface(map_size)
+# font = pygame.freetype.Font(pygame.font.get_default_font(), 16)
+font = pygame.font.SysFont("Trebuchet MS", 16)
 
 wall_offsets = {
     'left': (0, 0, wall_size, cell_size[1]),
@@ -26,7 +30,7 @@ wall_offsets = {
 }
 
 
-def render(position_id):
+def render(position_id, value_map=None):
     global screen
 
     background = surface.copy()
@@ -53,6 +57,10 @@ def render(position_id):
         if pid == environment.exit_id:
             pygame.draw.circle(background, GREEN, (x + (cell_size[0] // 2), y + (cell_size[1] // 2)), 20)
 
+        # if value_map is not None and pid in value_map.keys():
+        #     text = font.render(str(value_map[pid]), False, (0, 0, 0))
+        #     background.blit(text, (x,y))
+
     screen.blit(background, (0, 0))
     pygame.display.flip()
 
@@ -63,14 +71,14 @@ def shutdown():
 
 # BEISPIEL:
 
-# clock = pygame.time.Clock()
-# running = True
+clock = pygame.time.Clock()
+running = True
 
-# while running:
-#     for event in pygame.event.get():
-#         if event.type == pygame.QUIT:
-#             running = False
+while running:
+    for event in pygame.event.get():
+        if event.type == pygame.QUIT:
+            running = False
 
-#     rendering.render(environment.entry_id)
-#     clock.tick(2)
+    render(environment.entry_id)
+    clock.tick(2)
 
