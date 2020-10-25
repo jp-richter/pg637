@@ -23,8 +23,11 @@ Der Ausgang ist für das Problem in diesem Fall 'günstig' gelegt. Falls ihr mit
 
 Nutzt am besten erst mal ein möglichst einfaches neuronales Netz und vielleicht nutzt auch euer 'Expertenwissen' über das Labyrinth und gebt dem Netz perfekte Information, um im Zweifel eher Erfolge zu erzielen. Denkbar ist zum Beispiel eine Heuristik, die bestimmte Bewegungen zu bestimmten Feldern belohnt.
 
-Macht euch DEBUG-AUSGABEN!!! Wie oft wird welches Feld besucht? Was empfiehlt die aktuelle Policy für welches Feld? Wie ist die Wertigkeit (Monte-Carlo) eines Feldes? Schaut euch auch das README zu MNIST an.
+Macht euch DEBUG-AUSGABEN!!! Wie oft wird welches Feld besucht? Was empfiehlt die aktuelle Policy für welches Feld? Wie ist die Wertigkeit (Wenn ihr kein Value-Netzwerk habt, macht man das gewöhnlich über eine Monte-Carlo Simulation) eines Feldes? Schaut euch auch das README zu MNIST an.
+
+In environment.py gibt es eine pretty_print Funktion, der ihr ein Liste mit 36 Werten (Wie oft wurde was besucht?) übergeben könnt. Die Funktion schreibt dann eine schön formattierte ASCII-Matrix in die Konsole, an der ihr die räumliche Verteilung der besuchten Zuständer/Felder ablesen könnt.
 
 Falls euer Netz funktioniert lässt sich der Schwierigkeitsgrad auch erhöhen, indem ihr weniger Wissen über die Umgebung beim Agenten voraussetzt. Denkbar ist zum Beispiel eine Anwendung des REINFORCE Algorithmus. Das ist aber gar nicht so einfach, wie es zunächst aussieht und der Erfolg hängt sehr stark von euren Parametern und der Struktur des Labyrinths ab. Ihr solltet diese Lösung also auf keinen Fall auf Anhieb verfolgen.
+
 
 ![Bal](labyrinth.png)
