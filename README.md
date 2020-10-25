@@ -17,7 +17,7 @@ Dann definieren wir ein Netz das Inputvektoren dieser Größe bekommt und einen 
 Diese Werte sind die Wahrscheinlichkeiten, mit denen das Netz die entsprechenden Labels für die Eingabe vergibt.
 D. h. ist der Wert an der 0. Stelle im Ausgabevektor eine 0.7, denkt das Netz, dass die Eingabe zu 70% eine 0 ist.
 
-mnist.py enthält eine Implementierung eines kleinen Netzes, einer train-loop für das Netz und 
+mnist.py enthält eine Implementierung eines kleinen Netzes, eine train-loop für das Netz und 
 eine kleine Inferenz Demo des fertigen Netzes. Die spannenden Teile des Codes habe ich kommentiert, sodass hoffentlich verständlich wird, was passiert.
 
 Wenn ihr das Skript ausführt sollte, es ein Netz trainieren und anschließend zufällig ausgewählte Bilder aus dem Testdatensatz klassifizieren.
@@ -43,7 +43,7 @@ Es gibt auch ein sehr gutes [Blitz-Tutorial](https://pytorch.org/tutorials/begin
 
 #### Tipps und Tricks
 
-In einem neuronalen Netz arbeiten wir immer in Batches. D. h. wir forwarden eigentlich nicht einen Vektor einen Tensor der Form [784] sondern einen Tensor der Form [Nx784]. Wobei N die Batch-Size ist.
+In einem neuronalen Netz arbeiten wir immer in Batches. D. h. wir forwarden eigentlich nicht einen Tensor der Form [784] sondern einen Tensor der Form [Nx784]. Wobei N die Batch-Size ist.
 Wenn wir also nur ein Bild forwarden wollen müssen wir dem entsprechenden Vektor die Form [1x784] geben.
 
 *Um Dimensionen der Größe 1 hinzuzufügen/wegzunehmen, sind die Funktionen unsqueeze() und squeeze() sehr nütztlich:*
