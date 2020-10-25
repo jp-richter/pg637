@@ -43,14 +43,14 @@ Es gibt auch ein sehr gutes [Blitz-Tutorial](https://pytorch.org/tutorials/begin
 In einem neuronalen Netz arbeiten wir immer in Batches. D. h. wir forwarden eigentlich nicht einen Vektor einen Tensor der Form [784] sondern einen Tensor der Form [Nx784]. Wobei N die Batch-Size ist.
 Wenn wir also nur ein Bild forwarden wollen müssen wir dem entsprechenden Vektor die Form [1x784] geben. *Um Dimensionen der Größe 1 hinzuzufügen/wegzunehmen, sind die Funktionen unsqueeze() und squeeze() sehr nütztlich:*
 ```
-\>\>\> import torch
-\>\>\> a = torch.Tensor([1,6,4,8,6])
-\>\>\> a.shape
+>>> import torch
+>>> a = torch.Tensor([1,6,4,8,6])
+>>> a.shape
 torch.Size([5])
-\>\>\> a = a.unsqueeze(0)
-\>\>\> a.shape
+>>> a = a.unsqueeze(0)
+>>> a.shape
 torch.Size([1, 5])
-\>\>\> a = a.squeeze()
-\>\>\> a.shape
+>>> a = a.squeeze()
+>>> a.shape
 torch.Size([5])
 ```
