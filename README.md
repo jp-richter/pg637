@@ -26,3 +26,5 @@ Nutzt am besten erst mal ein möglichst einfaches neuronales Netz und vielleicht
 Macht euch DEBUG-AUSGABEN!!! Wie oft wird welches Feld besucht? Was empfiehlt die aktuelle Policy für welches Feld? Wie ist die Wertigkeit (Monte-Carlo) eines Feldes? Schaut euch auch das README zu MNIST an.
 
 Falls euer Netz funktioniert lässt sich der Schwierigkeitsgrad auch erhöhen, indem ihr weniger Wissen über die Umgebung beim Agenten voraussetzt. Denkbar ist zum Beispiel eine Anwendung des REINFORCE Algorithmus. Das ist aber gar nicht so einfach, wie es zunächst aussieht und der Erfolg hängt sehr stark von euren Parametern und der Struktur des Labyrinths ab. Ihr solltet diese Lösung also auf keinen Fall auf Anhieb verfolgen.
+
+![Bal](labyrinth.png)
