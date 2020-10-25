@@ -10,9 +10,6 @@ Für das Beispiel nutzen wir den [MNIST-Datensatz](https://en.wikipedia.org/wiki
 Machine Learnings entwickelt. Der Datensatz enthält Bilder von handgeschriebenen Ziffern und jedes
 Bild ist entsprechend gelabelt.
 
-
-![Ein Bild aus dem MNIST Datensatz mit einer handgeschriebenen 5](mnist_example.png "Ein Bild aus dem MNIST Datensatz mit einer handgeschriebenen 5")
-
 Wir wollen für unser kleines Beispiel keine Convolutional-Layer nutzen sondern nur einfache fully-connected-Layers.
 Dafür transformieren wir die Bilder aus ihrer ursprünglichen zwei-dimensionalen Form (28x28) zu
 eindimensionalen Vektoren (1x784).
