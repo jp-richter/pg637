@@ -6,7 +6,7 @@ Für die Policy-Gradient Aufgabe solltet ihr unter Anderem ein Neuronales Netz v
 Um euch damit vertraut zu machen, gibt es in diesem Branch ein kleines Beispiel, wie das
 Training eines NNs in PyTorch aussieht.
 
-Für das Beispiel nutzen wir den MNIST-Datensatz. Der hat sich quasi zum Hello World Programm des 
+Für das Beispiel nutzen wir den [MNIST-Datensatz](https://en.wikipedia.org/wiki/MNIST_database). Der hat sich quasi zum Hello World Programm des 
 Machine Learnings entwickelt. Der Datensatz enthält Bilder von handgeschriebenen Ziffern und jedes
 Bild ist entsprechend gelabelt.
 
