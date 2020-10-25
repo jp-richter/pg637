@@ -1,7 +1,8 @@
-
 position_ids = [i for i in range(36)]
 field_length = 6
+
 INVALID_PID = -1
+FINISHED = -2
 
 def left(position_id):
     if position_id % field_length > 0:
@@ -56,7 +57,7 @@ labyrinth = {
 
     12: ['up', 'down'],
     13: ['right', 'down'],
-    14: ['left', 'down'],
+    14: ['left', 'up'],
     15: ['up', 'down'],
     16: ['up', 'down'],
     17: ['down'],
@@ -80,7 +81,9 @@ labyrinth = {
     32: ['left', 'right', 'up'],
     33: ['left', 'right'],
     34: ['left', 'right'],
-    35: ['left', 'up']
+    35: ['left', 'up'],
+
+    FINISHED: []
 }
 
 assert not any(next_position_functions[d](wpid) == INVALID_PID for (wpid, directions) in labyrinth.items() for d in directions)
@@ -94,14 +97,14 @@ def get_valid_directions(position_id):
 
 def move(direction, source_id):
     if direction not in get_valid_directions(source_id):
-        raise ValueError('Moving to {} from {} is not allowed!'.format(direction, source_id))
+        return source_id, 0
 
     target_id = next_position_functions[direction](source_id)
 
     if target_id == INVALID_PID:
         raise ValueError('Something went horribly wrong!')
 
-    success = 1 if target_id == exit_id else 0
-    failure = -1 if target_id == trap_id else 0
+    success, target_id = (1, FINISHED) if target_id == exit_id else (0, target_id)
+    failure, target_id = (-1, FINISHED) if target_id == trap_id else (0, target_id)
 
-    return target_id, success + failure
+    return target_id, (success + failure)
