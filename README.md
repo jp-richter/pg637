@@ -10,8 +10,6 @@ Für das Beispiel nutzen wir den MNIST-Datensatz. Der hat sich quasi zum Hello W
 Machine Learnings entwickelt. Der Datensatz enthält Bilder von handgeschriebenen Ziffern und jedes
 Bild ist entsprechend gelabelt.
 
-<img src="mnist_example.png" width="200"\>
-
 
 ![Ein Bild aus dem MNIST Datensatz mit einer handgeschriebenen 5](mnist_example.png "Ein Bild aus dem MNIST Datensatz mit einer handgeschriebenen 5")
 
