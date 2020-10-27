@@ -8,6 +8,8 @@ import random
 
 OUTPUT_INTERVAL = 500
 
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+
 
 # Zuerst wollen wir unser Netz definieren.
 # Ein Netz ist in PyTorch eine Klasse, die von nn.Module erbt.
@@ -78,7 +80,7 @@ def train_loop(net, trainset, epoch):
     for i, data_batch in enumerate(trainloader):
         # Gradienten der (Netz)parameter vor jedem neuen Update nullen
         optimiser.zero_grad()
-        inputs, labels = data_batch
+        inputs, labels = data_batch[0].to(device), data_batch[1].to(device)
         batch_size = len(inputs)
         # Mnist hat Bilder der Dimension 28x28. Wir arbeiten ausschließlich mit fully-connected Layern.
         # Deswegen machen wir aus einem Batch von zwei-dimensionalen Tensoren einen Batch
@@ -108,12 +110,13 @@ def train_loop(net, trainset, epoch):
 
 
 def imshow(img):
-    npimg = img.reshape(28, 28).numpy()
+    npimg = img.reshape(28, 28).cpu().numpy()
     plt.imshow(npimg, cmap='binary')
     plt.show()
 
 def predict_random_sample(net, testloader):
     inputs, _ = iter(testloader).next()
+    inputs = inputs.to(device)
     batch_size = len(inputs)
     img = inputs[random.randrange(batch_size)].reshape(1, 784)
     print("Labels:        0     1     2     3     4     5     6     7     8     9")
@@ -129,6 +132,8 @@ def compute_accuracy(dataloader, net):
     correct = 0
     with torch.no_grad():
         for inputs, labels in dataloader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
             batch_size = len(inputs)
             inputs = inputs.reshape(batch_size, 784)
             outputs = net(inputs)
@@ -142,7 +147,7 @@ def compute_accuracy(dataloader, net):
 
 if __name__ == "__main__":
     trainloader, testloader = load_data()
-    net = Net()
+    net = Net().to(device)
     print("Accuracy with untrained net:")
     compute_accuracy(testloader, net)
     for i in range(3):
