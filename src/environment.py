@@ -11,7 +11,7 @@ def left(position_id):
 
 
 def right(position_id):
-    if position_id % field_length < field_length:
+    if position_id % field_length < field_length - 1:
         return position_id + 1
 
     return INVALID_PID
