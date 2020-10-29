@@ -1,3 +1,5 @@
+import numpy
+
 position_ids = [i for i in range(36)]
 field_length = 6
 
@@ -11,7 +13,7 @@ def left(position_id):
 
 
 def right(position_id):
-    if position_id % field_length < field_length:
+    if position_id % field_length < field_length - 1:
         return position_id + 1
 
     return INVALID_PID
@@ -89,8 +91,21 @@ entry_id = 24
 exit_id = 2  # 11
 trap_id = 17
 
+direction_indices = {
+    'left': 0,
+    'right': 1,
+    'up': 2,
+    'down': 3
+}
+
+direction_strings = {
+    v: k for (k, v) in direction_indices.items()
+}
+
+
 def get_valid_directions(position_id):
     return labyrinth[position_id]
+
 
 def move(direction, source_id):
     if source_id == exit_id:
@@ -100,14 +115,18 @@ def move(direction, source_id):
         return source_id, -1
 
     if direction not in get_valid_directions(source_id):
-        return source_id, 0
+        return source_id, -0.5
 
     target_id = next_position_functions[direction](source_id)
+
+    if not (numpy.abs(source_id - target_id) == 6 or numpy.abs(source_id - target_id)) == 1:
+        raise ValueError('Something went horribly wrong!')
 
     if target_id == INVALID_PID:
         raise ValueError('Something went horribly wrong!')
 
     return target_id, 0
+
 
 def prettyprint(values):
     print('\n----------------------')
@@ -116,6 +135,10 @@ def prettyprint(values):
         if i % 6 == 0 and not i == 0:
             print('\n')
 
-        print("| {:4d} |".format(val), end='')
+        try:
+            print("| {:3d} |".format(val), end='')
+
+        except:
+            print("| {:2f} |".format(val), end='')
 
     print('\n----------------------')
