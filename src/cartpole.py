@@ -32,8 +32,7 @@ class Net(torch.nn.Module):
             torch.nn.Tanh(),
             torch.nn.Linear(64, 64),
             torch.nn.Tanh(),
-            torch.nn.Linear(64, 2),  # q values
-            torch.nn.LogSoftmax(dim=0) 
+            torch.nn.Linear(64, 2)  # q values
         )
 
     def forward(self, x):
@@ -49,45 +48,62 @@ def train():
     optimizer = torch.optim.Adam(net.parameters(), lr=learnrate)
     criterion = torch.nn.MSELoss()
 
-    memory = collections.deque(maxlen=1000)  # state, action, next_state, reward
+    memory = collections.deque(maxlen=1000)  # state, action, next_state, done, reward
 
     for episode in range(episodes):
-        observation = env.reset()
+        state = env.reset()
+        net.eval()
+
+        memory_cache = []  # state, action, next_state, done
         done = False
 
-        memory_cache = []  # state, action, next_state
+        # Compute a single trajectory
 
         while not done:
             if numpy.random.random() > epsilon:
-                action = torch.argmax(net(torch.from_numpy(observation))).item()
+                action = torch.argmax(net(torch.from_numpy(state))).item()
 
             else:
                 action = env.action_space.sample()
 
-            next_observation, _, done, _ = env.step(action)
-            memory_cache.append((observation, action, next_observation))
+            next_state, _, done, _ = env.step(action)
+            memory_cache.append((state, action, next_state, done))
 
             epsilon = max(epsilon * epsilon_decay, epsilon_min)
-            observation = next_observation
+            state = next_state
 
-        rewards = reversed([numpy.log(i+1) for i in range(len(memory_cache))])
-        memory_cache = [(s1, a, s2, r) for ((s1, a, s2), r) in zip(memory_cache, rewards)]
+        rewards = reversed([numpy.log(i+1) for i in range(len(memory_cache))])  # log n, log n-1, ..
+        memory_cache = list(zip(*zip(*memory_cache), rewards))  # state, action, next_state, done, reward
         memory.extend(memory_cache)
 
-        print("Episode finished after {} timesteps".format(rewards))
+        print("Episode finished after {} timesteps".format(len(memory_cache)))
+
+        # Experience replay on memorized states
+
+        net.train()
 
         if len(memory) < batch_size:
             continue
 
-        batch = random.sample(memory, batch_size)
-        batch, _, _, labels = list(zip(*batch))
+        memories = random.sample(memory, batch_size)
+        states, actions, next_states, dones, rewards = list(zip(*memories))
+        states, next_states, rewards = torch.tensor(states), torch.tensor(next_states), torch.tensor(rewards)
 
-        batch, labels = torch.tensor(batch), torch.tensor(labels)
-        outputs = net(batch)
+        predictions = net(states)
 
-        # wir brauchen hier noch irgendeine anderen reward für die andere action
+        qvalues = rewards + 0.9 * torch.amax(net(next_states), dim=1)
+        targets = predictions.detach().clone()
+
+        for i in range(batch_size):
+            if not dones[i]:
+                targets[i][actions[i]] = qvalues[i]
+
+            else:
+                targets[i][actions[i]] = -1
         
-        loss = criterion(outputs, labels)
-        print(loss.item())
+        optimizer.zero_grad()
+        loss = criterion(predictions, targets)
+        loss.backward()
+        optimizer.step()
 
 train()
