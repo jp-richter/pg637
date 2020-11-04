@@ -90,13 +90,11 @@ def train():
         states, next_states, rewards = torch.tensor(states), torch.tensor(next_states), torch.tensor(rewards)
 
         predictions = net(states)
-
-        qvalues = rewards + 0.9 * torch.amax(net(next_states), dim=1)
         targets = predictions.detach().clone()
 
         for i in range(batch_size):
             if not dones[i]:
-                targets[i][actions[i]] = qvalues[i]
+                targets[i][actions[i]] = rewards[i]
 
             else:
                 targets[i][actions[i]] = -1
