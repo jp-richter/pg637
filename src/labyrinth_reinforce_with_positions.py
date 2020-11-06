@@ -13,7 +13,7 @@ Ihr könnt euch das alles auch anzeigen lassen indem ihr
 Dann sollte sich in eurem Browser das streamlit-dashboard öffnen
 """
 
-import simple_network
+import nn
 import torch
 import numpy
 import environment
