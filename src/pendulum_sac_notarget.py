@@ -119,7 +119,8 @@ def experience_replay():
     rewards = torch.tensor(rewards)
     qvalues = torch.tensor(qvalues)
 
-    # update q networks: JQ = 𝔼(s,a)~D[(Q1,2(s,a) - y)^2] with y = 𝔼(r)~D[r]
+    # update q networks: JQ = 𝔼(s,a)~D[(Q1,2(s,a) - y)^2] 
+    # with y = σ𝔼(r)~D[r] + (1 - σ)𝔼(s,a)~D[r + γ(1-d)(min Q1,2(s',a') - αlogπ(a'|s')]
 
     with torch.no_grad():
         next_actions, next_probs = policy.sample(next_states)
@@ -169,11 +170,10 @@ def play(evaluate=False):
                 env.render()
 
             next_state, reward, done, _ = env.step(action)
-
             reward = (reward + 8) / 16
 
             for step in range(env._elapsed_steps - 1):
-                memory[-step][4] += discount ** (env._elapsed_steps - step - 1) * reward
+                memory[-step][4] += discount ** (step+1) * reward
 
             memory.append([state, next_state, action, reward, reward])
             state = next_state
