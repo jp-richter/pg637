@@ -58,7 +58,10 @@ class Policy(torch.nn.Module):
     def forward(self, x):
         x = self.layers(x)
 
-        return self.mean(x), self.std(x) ** 2  # enforce positive std
+        mean = torch.tanh(self.mean(x)) * 2
+        std = torch.tanh(self.std(x)) ** 2
+
+        return mean, std
 
 
     def sample(self, x):
@@ -66,20 +69,26 @@ class Policy(torch.nn.Module):
         normal = torch.distributions.Normal(mean, std)
         action = normal.rsample()
         prob = normal.log_prob(action)
-        action = torch.tanh(action)
+        action = torch.tanh(action) * 2
 
         return action, prob
+
+    def save(self, file):
+        torch.save(self.state_dict(), file)
+
+    def load(self, file):
+        self.load_state_dict(torch.load(file))
 
 
 env = gym.make('Pendulum-v0')
 memory = collections.deque(maxlen=10000)
 
-discount = 0.99
+discount = 0.9
 alpha = 0.2
 tau = 0.95  # usually close to 1
-lr_policy = 0.01  # 0.0003
-lr_q = 0.01  # 0.0003
-episodes = 1000
+lr_policy = 0.0003  # 0.0003
+lr_q = 0.0003  # 0.0003
+episodes = 10000
 batchsize = 16
 
 policy = Policy().double()
@@ -97,20 +106,19 @@ crit = torch.nn.MSELoss()
 
 def experience_replay():
     memories = random.sample(memory, batchsize)
-    states, next_states, actions, rewards, mask =  list(zip(*memories))
+    states, next_states, actions, rewards = list(zip(*memories))
 
     states = torch.tensor(states)
     next_states = torch.tensor(next_states)
     actions = torch.tensor(actions)
     rewards = torch.tensor(rewards)
-    mask = torch.tensor(mask)
 
     # update q networks: JQ = 𝔼(s,a)~D[(Q1,2(s,a) - y)^2] with y = r + γ(1-d)(min Q1,2(s',a') - αlogπ(a'|s'))
 
     with torch.no_grad():
         next_actions, next_probs = policy.sample(next_states)
         _, _, minQ = twinQ_target(next_states, next_actions)
-        y = rewards + discount * mask * (minQ - alpha * next_probs[:, 0])
+        y = rewards + discount * (minQ - alpha * next_probs[:, 0])
 
     q1, q2, _ = twinQ(next_states, next_actions)
 
@@ -137,49 +145,42 @@ def experience_replay():
 
     twinQ_target.update(twinQ, tau)
 
-    return q_loss.item(), policy_loss.item()
-
 
 def train():
-    rewards = []
-    q_losses = []
-    p_losses = []
-
     for episode in range(episodes):
         state = env.reset()
         done = False
-        rew = 0
 
         with torch.no_grad():
             while not done:
                 action, _ = policy.sample(torch.from_numpy(state))
                 next_state, reward, done, _ = env.step(action)
-                mask = 1.0 if env._elapsed_steps == env._max_episode_steps else float(not done)
-                memory.append((state, next_state, action, reward, mask))
+                reward = (reward + 8) / 16
 
-                rew += reward
-
-        rewards.append(rew)
-        rew = 0
+                memory.append((state, next_state, action, reward))
+                state = next_state
 
         if len(memory) > batchsize:
-            qloss, ploss = experience_replay()
-            q_losses.append(qloss)
-            p_losses.append(ploss)
+            experience_replay()
+
+        if episode % 1000 == 0:
+            print(episode)
+
+    policy.save('/Users/jan/Repositories/pg637/Net4.net')
 
 
-    import matplotlib.pyplot
+def evaluate():
+    policy.load('/Users/jan/Repositories/pg637/Net_Collapsed.net')
 
-    x = [i for i in range(len(rewards))]
+    for test in range(100):
+        state = env.reset()
+        done = False
 
-    matplotlib.pyplot.plot(x, rewards)
-    matplotlib.pyplot.show()
+        with torch.no_grad():
+            while not done:
+                action, _ = policy.forward(torch.from_numpy(state))
+                next_state, reward, done, _ = env.step(action)
 
-    matplotlib.pyplot.plot(x, q_losses)
-    matplotlib.pyplot.show()
-
-    matplotlib.pyplot.plot(x, p_losses)
-    matplotlib.pyplot.show()
-
-
-train()
+                memory.append((state, next_state, action, reward))
+                state = next_state
+                env.render()
