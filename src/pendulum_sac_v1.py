@@ -53,24 +53,25 @@ class Policy(torch.nn.Module):
         )
 
         self.mean = torch.nn.Linear(128, 1)
-        self.std = torch.nn.Linear(128, 1)
+        self.log_std = torch.nn.Linear(128, 1)
 
     def forward(self, x):
         x = self.layers(x)
 
         mean = torch.tanh(self.mean(x)) * 2
-        std = torch.max(self.std(x) ** 2, torch.tensor([1]).double())
+        log_std = self.log_std(x)
 
-        return mean, std
+        return mean, log_std
 
 
     def sample(self, x):
-        mean, std = self.forward(x)
+        mean, log_std = self.forward(x)
+        log_std = torch.clamp(log_std, -20, 2)
+        std = torch.exp(log_std)
         normal = torch.distributions.Normal(mean, std)
-        action = normal.sample()
+        action = normal.rsample()
         prob = normal.log_prob(action)
         action = torch.tanh(action) * 2
-        entropy = normal.entropy()
 
         return action, prob
 
@@ -92,7 +93,7 @@ sigma = 0.0  # influence of memory Q instead of target Q
 sigma_decay = 0.0  # 0.4, use it only for kickstart
 lr_policy = 0.002  # 0.0003
 lr_q = 0.002  # 0.0003
-episodes = 1000
+episodes = 10000
 batchsize = 16
 
 policy = Policy().double()
@@ -201,7 +202,7 @@ def play(evaluate=False):
     if total > max_reward and not evaluate:
         policy.save('/Users/jan/Repositories/pg637/Max_Reward_Policy.net')
         max_reward = total
-        play(evaluate=True)
+        # play(evaluate=True)
 
 
 def train():
