@@ -120,8 +120,8 @@ def experience_replay():
         _, _, minQ = twinQ_target(next_states, next_actions)
         y = rewards + discount * (minQ - alpha * next_probs[:, 0])
 
-    q1, q2, _ = twinQ(next_states, next_actions)
-    q_loss = -0.5 * (crit(q1, y) + crit(q2, y)) / batchsize
+    q1, q2, _ = twinQ(states, actions)
+    q_loss = 0.5 * (crit(q1, y) + crit(q2, y)) / batchsize
 
     opt_q.zero_grad()
     q_loss.backward()
@@ -171,7 +171,7 @@ def play(evaluate=False):
 
             state = next_state
 
-    if total > max_reward:
+    if total > max_reward and not evaluate:
         policy.save('/Users/jan/Repositories/pg637/Max_Reward_Policy.net')
         max_reward = total
         play(evaluate=True)

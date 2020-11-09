@@ -59,7 +59,7 @@ class Policy(torch.nn.Module):
         x = self.layers(x)
 
         mean = torch.tanh(self.mean(x)) * 2
-        std = torch.tanh(self.std(x)) ** 2
+        std = torch.max(self.std(x) ** 2, torch.tensor([1]).double())
 
         return mean, std
 
@@ -67,9 +67,10 @@ class Policy(torch.nn.Module):
     def sample(self, x):
         mean, std = self.forward(x)
         normal = torch.distributions.Normal(mean, std)
-        action = normal.rsample()
+        action = normal.sample()
         prob = normal.log_prob(action)
         action = torch.tanh(action) * 2
+        entropy = normal.entropy()
 
         return action, prob
 
@@ -81,14 +82,14 @@ class Policy(torch.nn.Module):
 
 
 env = gym.make('Pendulum-v0')
-memory = collections.deque(maxlen=10000)
+memory = collections.deque(maxlen=1000)
 
-discount = 0.6
-alpha = 0.4
+discount = 0.9
+alpha = 0.5
 alpha_decay = 0.99
 tau = 0.99  # usually close to 1
-sigma = 1.0  # influence of memory Q instead of target Q
-sigma_decay = 0.99
+sigma = 0.0  # influence of memory Q instead of target Q
+sigma_decay = 0.0  # 0.4, use it only for kickstart
 lr_policy = 0.002  # 0.0003
 lr_q = 0.002  # 0.0003
 episodes = 1000
@@ -126,12 +127,12 @@ def experience_replay():
         next_actions, next_probs = policy.sample(next_states)
         _, _, minQ = twinQ_target(next_states, next_actions)
 
-    q1, q2, _ = twinQ(next_states, next_actions)
+    q1, q2, _ = twinQ(states, actions[:, None])
         
     y = rewards + discount * (minQ - alpha * next_probs[:, 0])
     y = sigma * qvalues + (1 - sigma) * y
 
-    q_loss = (crit(q1, y) + crit(q2, y)) / batchsize
+    q_loss = 0.5 * (crit(q1, y) + crit(q2, y)) / batchsize
 
     opt_q.zero_grad()
     q_loss.backward()
@@ -143,6 +144,16 @@ def experience_replay():
 
     _, _, minQ = twinQ(next_states, next_actions)
     policy_loss = -(minQ - alpha * next_probs).mean()  # 𝔼(αH(π)) = 𝔼(-αlogπ)! :O
+
+    # print('Q ', q1.mean().item())
+    # print('Y ', y.mean().item())
+    # print('Probs ', torch.exp(next_probs).mean().item())
+    # print('Rewards ', rewards.mean().item())
+    # print('Q Loss ', q_loss.item())
+    # print('minQT ', minQ.mean().item())
+    # print('minQA ', minQ.mean().item())
+    # print('Policy Loss ', policy_loss.item())
+    # print('Entropy ', (-next_probs).mean().item())
 
     opt_policy.zero_grad()
     policy_loss.backward()
@@ -156,9 +167,15 @@ def experience_replay():
     alpha *= alpha_decay
 
 
+max_reward = -1000.0
+
+
 def play(evaluate=False):
+    global max_reward
+
     state = env.reset()
     done = False
+    total = 0.0
 
     with torch.no_grad():
         while not done:
@@ -170,13 +187,21 @@ def play(evaluate=False):
                 env.render()
 
             next_state, reward, done, _ = env.step(action)
-            reward = (reward + 8) / 16
+            reward = (reward + 4) / 8
+            total += reward
 
             for step in range(env._elapsed_steps - 1):
                 memory[-step][4] += discount ** (step+1) * reward
 
-            memory.append([state, next_state, action, reward, reward])
+            if not evaluate:
+                memory.append([state, next_state, action, reward, reward])
+
             state = next_state
+
+    if total > max_reward and not evaluate:
+        policy.save('/Users/jan/Repositories/pg637/Max_Reward_Policy.net')
+        max_reward = total
+        play(evaluate=True)
 
 
 def train():
@@ -184,12 +209,13 @@ def train():
         play()
 
         if len(memory) > batchsize:
-            experience_replay()
+            for _ in range(1):
+                experience_replay()
 
         if episode % 1000 == 0:
             print(episode)
 
-    policy.save('/Users/jan/Repositories/pg637/Net_Sigma.net')
+    policy.load('/Users/jan/Repositories/pg637/Max_Reward_Policy.net')
 
     for _ in range(50):
         play(evaluate=True)
