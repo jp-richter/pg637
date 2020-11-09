@@ -88,7 +88,7 @@ alpha = 0.2
 tau = 0.95  # usually close to 1
 lr_policy = 0.0003  # 0.0003
 lr_q = 0.0003  # 0.0003
-episodes = 10000
+episodes = 1000
 batchsize = 16
 
 policy = Policy().double()
@@ -121,10 +121,7 @@ def experience_replay():
         y = rewards + discount * (minQ - alpha * next_probs[:, 0])
 
     q1, q2, _ = twinQ(next_states, next_actions)
-
-    q1_loss = crit(q1, y)
-    q2_loss = crit(q2, y)
-    q_loss = (q1_loss + q2_loss) / batchsize
+    q_loss = -0.5 * (crit(q1, y) + crit(q2, y)) / batchsize
 
     opt_q.zero_grad()
     q_loss.backward()
@@ -146,41 +143,55 @@ def experience_replay():
     twinQ_target.update(twinQ, tau)
 
 
+max_reward = -1000.0
+
+
+def play(evaluate=False):
+    global max_reward
+
+    state = env.reset()
+    done = False
+    total = 0.0
+
+    with torch.no_grad():
+        while not done:
+            if not evaluate:
+                action, _ = policy.sample(torch.from_numpy(state))
+
+            else:
+                action, _ = policy(torch.from_numpy(state))
+                env.render()
+
+            next_state, reward, done, _ = env.step(action)
+            # reward = (reward + 8) / 16
+            total += reward
+
+            if not evaluate:
+                memory.append([state, next_state, action, reward])
+
+            state = next_state
+
+    if total > max_reward:
+        policy.save('/Users/jan/Repositories/pg637/Max_Reward_Policy.net')
+        max_reward = total
+        play(evaluate=True)
+
+
 def train():
     for episode in range(episodes):
-        state = env.reset()
-        done = False
-
-        with torch.no_grad():
-            while not done:
-                action, _ = policy.sample(torch.from_numpy(state))
-                next_state, reward, done, _ = env.step(action)
-                reward = (reward + 8) / 16
-
-                memory.append((state, next_state, action, reward))
-                state = next_state
+        play()
 
         if len(memory) > batchsize:
-            experience_replay()
+            for _ in range(5):
+                experience_replay()
 
         if episode % 1000 == 0:
             print(episode)
 
-    policy.save('/Users/jan/Repositories/pg637/Net4.net')
+    policy.load('/Users/jan/Repositories/pg637/Max_Reward_Policy.net')
+
+    for _ in range(50):
+        play(evaluate=True)
 
 
-def evaluate():
-    policy.load('/Users/jan/Repositories/pg637/Net_Collapsed.net')
-
-    for test in range(100):
-        state = env.reset()
-        done = False
-
-        with torch.no_grad():
-            while not done:
-                action, _ = policy.forward(torch.from_numpy(state))
-                next_state, reward, done, _ = env.step(action)
-
-                memory.append((state, next_state, action, reward))
-                state = next_state
-                env.render()
+train()
