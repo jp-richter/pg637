@@ -2,7 +2,7 @@ import pygame
 import pygame.draw
 import pygame.freetype
 import pygame.font
-import environment
+from src.tutorial import environment
 
 WHITE = (255, 255, 255)
 BLACK = (0, 0, 0)
