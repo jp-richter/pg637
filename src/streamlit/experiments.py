@@ -158,7 +158,7 @@ def visualize(data):
             fn(*variables)
 
         if log[KEY_PLOTTYPE] in with_slider:
-            with streamlit.beta_expander(name + ' with episode-slider'):git
+            with streamlit.beta_expander(name + ' with episode-slider'):
                 no_partitions = len(logs) // 100
                 partitions = numpy.array_split(logs, no_partitions)
                 partitions = [list(zip(*p))[1:] for p in partitions]  # [1:] skips the frames in [0]
