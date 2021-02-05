@@ -1,0 +1,13 @@
+{
+	"MethodName" : "SAC-A-0205",
+	"ShortDescription": "Some short description",
+	"LongDescription": "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed diam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod tempor invidunt ut labore et dolore magna aliquyam erat, sed iam voluptua. At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est Lorem ipsum dolor sit amet.",
+	"Notes": "We wanted to find out if the Snark is actually a Boojum.",
+	"Runtime": "1d 23h 15m",
+	"Hyperparameter" : {
+		"lr" : 0.1,
+		"epsilon" : 0.2,
+		"gamma" : 0.9,
+		"batchSize" : 64
+	}
+}
