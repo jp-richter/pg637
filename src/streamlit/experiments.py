@@ -8,6 +8,19 @@ import os
 import re
 
 
+# keys used in the json log
+
+KEY_METHOD_NAME = 'MethodName'
+KEY_SHORT_DESCR = 'ShortDescription'
+KEY_LONG_DESSCR = 'LongDescription'
+KEY_NOTES = 'Notes'
+KEY_RUNTIME = 'Runtime'
+KEY_HYPERPARAMETERS = 'Hyperparameter'
+KEY_VALUES = 'Values'
+KEY_FRAMESTAMPS = 'Framestamps'
+KEY_PLOTTYPE = 'Plot Type '
+
+
 def main():
     streamlit.set_page_config(layout='centered')  # options are wide and centered
     experiments = load(base_path='./')  # change the base path to the actual path
@@ -17,7 +30,7 @@ def main():
     for name, data in experiments.items():
         streamlit.sidebar.markdown('''
             **{}**: {}
-        '''.format(name, data['short description']))
+        '''.format(name, data[KEY_SHORT_DESCR]))
 
     for name, data in experiments.items():
         if name == experiment_chosen:
@@ -51,12 +64,12 @@ def load(base_path):
             logs = json.load(file)
 
         required_keys = [
-            'MethodName',
-            'ShortDescription',
-            'LongDescription',
-            'Runtime',
-            'Notes',
-            'Hyperparameter'
+            KEY_METHOD_NAME,
+            KEY_SHORT_DESCR,
+            KEY_LONG_DESSCR,
+            KEY_RUNTIME,
+            KEY_NOTES,
+            KEY_HYPERPARAMETERS
         ]
 
         if not all((k in info.keys() for k in required_keys)):
@@ -64,7 +77,7 @@ def load(base_path):
                   f'already run your experiment, add the entries manually to the json file.')
             continue
 
-        if not basename == info['MethodName']:
+        if not basename == info[KEY_METHOD_NAME]:
             print(f'Error: Folder is named {folder} and method is named {info["MethodName"]}, please stick to the same'
                   f'naming convention. Suggestions to change the naming convention are welcome. The folder will be '
                   f'omitted.')
@@ -81,18 +94,18 @@ def load(base_path):
         cache = []
 
         for name, log in logs.items():
-            dimension_actual = len(log['Values'][0])
-            dimension_allowed = allowed_dimensions[log['Plot Type ']]
+            dimension_actual = len(log[KEY_VALUES][0])
+            dimension_allowed = allowed_dimensions[log[KEY_PLOTTYPE]]
 
-            if log['Framestamps'] == 'True':  # assumed to be the first dimension
+            if log[KEY_FRAMESTAMPS] == 'True':  # assumed to be the first dimension
                 dimension_allowed += 1
 
             if dimension_actual != dimension_allowed: 
                 print(f'Warning: The variable {name} in {folder}/Logs.json has dimensions {dimension_actual} and plot '
-                      f'type {log["Plot Type "]} with Framestamps={log["Framestamps"]}, which allows only entries with '
-                      f'dimension {dimension_allowed}. he log for {name} will not be visualized.')
+                      f'type {log[KEY_PLOTTYPE]} with Framestamps={log[KEY_FRAMESTAMPS]}, which allows only entries '
+                      f'with dimension {dimension_allowed}. The log for {name} will not be visualized.')
 
-            if dimension_actual != dimension_allowed or log['Plot Type '] == 'Empty':
+            if dimension_actual != dimension_allowed or log[KEY_PLOTTYPE] == 'Empty':
                 cache.append(name)
 
         for key in cache:
@@ -100,12 +113,12 @@ def load(base_path):
 
         experiments.append((logs, info))
 
-    return {info['MethodName']: {
-        'short description': info['ShortDescription'],
-        'long description': info['LongDescription'],
-        'runtime': info['Runtime'],
-        'notes': info['Notes'],
-        'hyperparameters': info['Hyperparameter'],
+    return {info[KEY_METHOD_NAME]: {
+        KEY_SHORT_DESCR: info[KEY_SHORT_DESCR],
+        KEY_LONG_DESSCR: info[KEY_LONG_DESSCR],
+        KEY_RUNTIME: info[KEY_RUNTIME],
+        KEY_NOTES: info[KEY_NOTES],
+        KEY_HYPERPARAMETERS: info[KEY_HYPERPARAMETERS],
         'logs': log
     } for (log, info) in experiments}
 
@@ -117,10 +130,10 @@ def visualize(data):
     {}
     ## Notes
     {}
-    '''.format(data['runtime'], data['long description'], data['notes']))
+    '''.format(data[KEY_RUNTIME], data[KEY_LONG_DESSCR], data[KEY_NOTES]))
 
     with streamlit.beta_expander('Hyperparameters'):
-        streamlit.write(data['hyperparameters'])
+        streamlit.write(data[KEY_HYPERPARAMETERS])
 
     functions = {
         'line': line,
@@ -133,27 +146,27 @@ def visualize(data):
     with_slider = ['histogram', 'histogram2d']
 
     for name, log in data['logs'].items():
-        fn = functions[log['Plot Type ']]  # see json logger for key
+        fn = functions[log[KEY_PLOTTYPE]]  # see json logger for key
 
-        logs = log['Values']
-        variables = list(zip(*log['Values']))
+        logs = log[KEY_VALUES]
+        variables = list(zip(*log[KEY_VALUES]))
 
-        if log['Framestamps'] == 'True':
+        if log[KEY_FRAMESTAMPS] == 'True':
             frames, variables = variables[0], variables[1:]
 
         with streamlit.beta_expander(name):
             fn(*variables)
 
-        if log['Plot Type '] in with_slider:
-            with streamlit.beta_expander(name + ' with episode-slider'):
+        if log[KEY_PLOTTYPE] in with_slider:
+            with streamlit.beta_expander(name + ' with episode-slider'):git
                 no_partitions = len(logs) // 100
                 partitions = numpy.array_split(logs, no_partitions)
-                partitions = [list(zip(*p))[1:] for p in partitions]
+                partitions = [list(zip(*p))[1:] for p in partitions]  # [1:] skips the frames in [0]
 
                 slider = streamlit.slider(f'{name} -- episodes * {len(partitions[0])}', 0, len(partitions) - 1)
                 fn(*partitions[slider])
 
-        if log['Framestamps'] == 'True':
+        if log[KEY_FRAMESTAMPS] == 'True':
             max_frame = max(frames)
             no_buckets = 10
             size_buckets = (max_frame // no_buckets) + 1
