@@ -6,6 +6,7 @@ import matplotlib.pyplot
 import seaborn
 import os
 import re
+import numbers
 
 
 # keys used in the json log
@@ -94,6 +95,25 @@ def load(base_path):
         cache = []
 
         for name, log in logs.items():
+            if not type(log[KEY_VALUES][0]) == list:
+                print(f'Warning: Non-tuple type in value log of {name} in {folder}/Logs.json. The entries will be '
+                      f'interpreted as 1-dimensional tuples.')
+
+                try:
+                    for i in range(len(log[KEY_VALUES])):
+                        log[KEY_VALUES][i] = list(log[KEY_VALUES][i])
+                except Exception as e:
+                    print(f'Error: Interpreting entries as 1-dimensional tuples failed, the log will be omitted. '
+                          f'Stacktrace: {e}')
+                    cache.append(name)
+                    continue
+
+            if not isinstance(log[KEY_VALUES][0], numbers.Number):
+                print(f'Warning: Non-number type in value log of {name} in {folder}/Logs.json, found type '
+                      f'{type(log[KEY_VALUES][0])} instead. Log will be omitted.')
+                cache.append(name)
+                continue
+
             dimension_actual = len(log[KEY_VALUES][0])
             dimension_allowed = allowed_dimensions[log[KEY_PLOTTYPE]]
 
