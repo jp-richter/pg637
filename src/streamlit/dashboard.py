@@ -1,21 +1,35 @@
 import streamlit
+import altair
 import numpy
 import json
 import pandas
-import matplotlib.pyplot
-import matplotlib.axes._subplots
-import matplotlib.figure
-import seaborn
 import os
 import re
 import numbers
 
+#
+# Run this script with "streamlit run dashboard.py" from the directory the script is located in. Change the parameters
+# below. The script makes a few assumptions about the format of the json logs, which are listed below. If your logs
+# don't meet these assumptions, update your log files manually or the respective log entries will be omitted.
+#
+#     - The directory your logs are located in should adhere to the naming convention '{methodname}-{char}-{mmdd}', f.e.
+#       'SAC-A-0221'.
+#     - 'Info.json' and 'Logs.json' have to exist in that directory.
+#     - 'Info.json' has to have keys: MethodName, ShortDescription, LongDescription, Notes, Runtime, Hyperparameter. The
+#       method name has to be equal to the name of the base directory.
+#     - 'Logs.json' consists of entries {Log Name}: {'Values': [tuple], 'Framestamps': str, 'Plot Type': str}. The
+#       framestamps value can be set to 'True' or 'False'. For plot types see the logger documentation.
+#     - Depending on the plot type the tuples in the list entry of 'Values' can only be of certain length. If
+#       framestamps is set to 'True', one additional dimension is allowed. If you dont actually want to plot your log
+#       you can use plot type Empty.
+#
 
-LAYOUT = 'centered'  # change this, options are wide and centered
+LAYOUT = 'wide'  # change this, options are wide and centered
 PATH = './'  # change this, this is the path to the folder containing the experiments
+FILL_BROWSER_WIDTH = True  # iff true, the plots will expand to the full length of your browser window
 
 
-# keys used in the json log
+# keys used in the json log, dont change anything below
 
 KEY_METHOD_NAME = 'MethodName'
 KEY_SHORT_DESCR = 'ShortDescription'
@@ -187,8 +201,8 @@ def visualize(title, data):
         # normal plots
 
         with streamlit.beta_expander(ident):
-            figure = fn(title + ident, *variables)
-            streamlit.pyplot(figure)
+            figure = fn(*variables)
+            streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
 
         # episode slider plots
 
@@ -199,8 +213,8 @@ def visualize(title, data):
                 partitions = [list(zip(*p))[1:] for p in partitions]  # [1:] skips the frames in [0]
 
                 slider = streamlit.slider(f'{ident} -- episodes * {len(partitions[0])}', 0, len(partitions) - 1)
-                figure = fn(title + ident_slider_episodes + str(slider), *partitions[slider])
-                streamlit.pyplot(figure)
+                figure = fn(*partitions[slider])
+                streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
 
         # frame slider plots
 
@@ -218,100 +232,81 @@ def visualize(title, data):
 
             with streamlit.beta_expander(ident_slider_frames):
                 slider = streamlit.slider(f'{name} -- frame buckets of size {size_buckets}', 0, no_buckets - 1)
-                figure = fn(title + ident_slider_frames + str(slider), *buckets[slider])
-                streamlit.pyplot(figure)
+                figure = fn(*buckets[slider])
+                streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
 
 
-# why is streamlit this stupid?
-disable_hashing_on = {
-    tuple: (lambda t: hash(t[0])),
-
-    pandas.DataFrame: (lambda _: None),
-    numpy.ndarray: (lambda _: None),
-    matplotlib.figure.Figure: (lambda _: None),
-    matplotlib.axes._subplots.SubplotBase: (lambda _: None),
-    seaborn.axisgrid.JointGrid: (lambda _: None),
-    matplotlib.axes.Axes: (lambda _: None)
-}
-
-
-@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
-def line(ident, y, name=''):
+def line(y, name='y'):
     frame = pandas.DataFrame({
-        'episodes': len(y),
-        'name': y
+        'episodes': numpy.linspace(0, len(y), len(y)),
+        name: numpy.array(y)
     })
-    episodes = len(y)
-    x = numpy.linspace(0, episodes, episodes)
-    figure, axis = matplotlib.pyplot.subplots()
-    axis.plot(x, y, '-')
 
-    return figure
+    return altair.Chart(frame).mark_line().encode(x='episodes', y=name)
 
 
-@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
-def histogram(ident, x, name=''):
-    # frame = pandas.DataFrame({
-    #     name: x
-    # })
+def histogram(x, name='x'):
+    frame = pandas.DataFrame({
+        name: numpy.array(x),
+    })
 
-    # matplotlib.pyplot.figure()
-    # plot = seaborn.histplot(frame, x=name)
-    # figure = plot.get_figure()
-    abc = ident
-    figure, axis = matplotlib.pyplot.subplots()
-    axis.hist(x)
-
-    return figure
+    return altair.Chart(frame).mark_bar().encode(x=altair.X(name + '', bin=True), y='count()')
 
 
-@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
-def histogram2d(ident, x, y, x_name='', y_name=''):
+def histogram2d(x, y, x_name='x', y_name='y'):
     frame = pandas.DataFrame({
         x_name: numpy.array(x),
         y_name: numpy.array(y)
     })
 
-    matplotlib.pyplot.figure()
-    plot = seaborn.jointplot(data=frame, x=x_name, y=y_name, kind='hex')
-    figure = plot.fig
+    plot = altair.Chart(frame).mark_circle().encode(
+        altair.X(x_name, bin=True),
+        altair.Y(y_name, bin=True),
+        size='count()'
+    ).interactive()
 
-    return figure
+    return plot
 
 
-@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
-def scatter(ident, x, y, x_name='', y_name=''):
+def scatter(x, y, x_name='x', y_name='y'):
     frame = pandas.DataFrame({
         x_name: numpy.array(x),
         y_name: numpy.array(y)
     })
 
-    matplotlib.pyplot.figure()
-    plot = seaborn.scatterplot(data=frame, x=x_name, y=y_name)
-    figure = plot.get_figure()
+    plot = altair.Chart(frame).mark_circle(size=60).encode(
+        x=x_name,
+        y=y_name,
+        color='Group',
+        tooltip=['Name', 'Group', x_name, y_name]
+    ).interactive()
 
-    return figure
+    return plot
 
 
-@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
-def tube(ident, x, y):
-    episodes = len(x)
-    mean = numpy.array(x)
-    std = numpy.array(y)
-    upper = mean + std
-    lower = mean - std
+def tube(x, y, x_name='x', y_name='y'):
+    x_array = numpy.array(x)
+    y_array = numpy.array(y)
 
-    print('RERUN?')
+    frame = pandas.DataFrame({
+        'episodes': numpy.linspace(0, len(x), len(x)),
+        x_name: x_array,
+        'lower': x_array - y_array,
+        'upper': x_array + y_array
+    })
 
-    x = numpy.linspace(0, episodes, episodes)
-    figure, axis = matplotlib.pyplot.subplots()
+    line = altair.Chart(frame).mark_line().encode(
+        x='episodes',
+        y=x_name
+    )
 
-    print(type(axis))
+    band = altair.Chart(frame).mark_area(opacity=0.5).encode(
+        x='episodes',
+        y='lower',
+        y2='upper'
+    )
 
-    axis.plot(x, mean, '-', alpha=1)
-    axis.fill_between(x, upper, lower, alpha=0.5)
-
-    return figure
+    return band + line
 
 
 main()
