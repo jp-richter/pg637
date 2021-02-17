@@ -259,11 +259,17 @@ def histogram2d(x, y, x_name='x', y_name='y'):
         y_name: numpy.array(y)
     })
 
-    plot = altair.Chart(frame).mark_circle().encode(
-        altair.X(x_name, bin=True),
-        altair.Y(y_name, bin=True),
-        size='count()'
-    ).interactive()
+    # plot = altair.Chart(frame).mark_circle().encode(
+    #     altair.X(x_name, bin=True),
+    #     altair.Y(y_name, bin=True),
+    #     size='count()'
+    # ).interactive()
+
+    plot = altair.Chart(frame).mark_rect().encode(
+        altair.X(x_name, bin=altair.Bin(maxbins=60)),
+        altair.Y(y_name, bin=altair.Bin(maxbins=40)),
+        altair.Color('count()', scale=altair.Scale(scheme='greenblue'))
+    )
 
     return plot
 
