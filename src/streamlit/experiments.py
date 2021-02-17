@@ -3,10 +3,16 @@ import numpy
 import json
 import pandas
 import matplotlib.pyplot
+import matplotlib.axes._subplots
+import matplotlib.figure
 import seaborn
 import os
 import re
 import numbers
+
+
+LAYOUT = 'centered'  # change this, options are wide and centered
+PATH = './'  # change this, this is the path to the folder containing the experiments
 
 
 # keys used in the json log
@@ -23,8 +29,8 @@ KEY_PLOTTYPE = 'Plot Type '
 
 
 def main():
-    streamlit.set_page_config(layout='centered')  # options are wide and centered
-    experiments = load(base_path='./')  # change the base path to the actual path
+    streamlit.set_page_config(layout=LAYOUT)  # options are wide and centered
+    experiments = load(base_path=PATH)  # change the base path to the actual path
     experiment_chosen = streamlit.sidebar.selectbox('Choose an experiment!', list(experiments.keys()))
     streamlit.title(experiment_chosen)
 
@@ -35,7 +41,7 @@ def main():
 
     for name, data in experiments.items():
         if name == experiment_chosen:
-            visualize(data)
+            visualize(name, data)
 
 
 @streamlit.cache
@@ -108,9 +114,9 @@ def load(base_path):
                     cache.append(name)
                     continue
 
-            if not isinstance(log[KEY_VALUES][0], numbers.Number):
+            if not isinstance(log[KEY_VALUES][0][0], numbers.Number):
                 print(f'Warning: Non-number type in value log of {name} in {folder}/Logs.json, found type '
-                      f'{type(log[KEY_VALUES][0])} instead. Log will be omitted.')
+                      f'{type(log[KEY_VALUES][0][0])} instead. Log will be omitted.')
                 cache.append(name)
                 continue
 
@@ -143,7 +149,7 @@ def load(base_path):
     } for (log, info) in experiments}
 
 
-def visualize(data):
+def visualize(title, data):
     streamlit.markdown('''
     ## Runtime: {}
     ## Description
@@ -168,23 +174,35 @@ def visualize(data):
     for name, log in data['logs'].items():
         fn = functions[log[KEY_PLOTTYPE]]  # see json logger for key
 
+        ident = name
+        ident_slider_episodes = name + 'with episode slider'
+        ident_slider_frames = name + 'with frame slider'
+
         logs = log[KEY_VALUES]
         variables = list(zip(*log[KEY_VALUES]))
 
         if log[KEY_FRAMESTAMPS] == 'True':
             frames, variables = variables[0], variables[1:]
 
-        with streamlit.beta_expander(name):
-            fn(*variables)
+        # normal plots
+
+        with streamlit.beta_expander(ident):
+            figure = fn(title + ident, *variables)
+            streamlit.pyplot(figure)
+
+        # episode slider plots
 
         if log[KEY_PLOTTYPE] in with_slider:
-            with streamlit.beta_expander(name + ' with episode-slider'):
+            with streamlit.beta_expander(ident_slider_episodes):
                 no_partitions = len(logs) // 100
                 partitions = numpy.array_split(logs, no_partitions)
                 partitions = [list(zip(*p))[1:] for p in partitions]  # [1:] skips the frames in [0]
 
-                slider = streamlit.slider(f'{name} -- episodes * {len(partitions[0])}', 0, len(partitions) - 1)
-                fn(*partitions[slider])
+                slider = streamlit.slider(f'{ident} -- episodes * {len(partitions[0])}', 0, len(partitions) - 1)
+                figure = fn(title + ident_slider_episodes + str(slider), *partitions[slider])
+                streamlit.pyplot(figure)
+
+        # frame slider plots
 
         if log[KEY_FRAMESTAMPS] == 'True':
             max_frame = max(frames)
@@ -198,38 +216,57 @@ def visualize(data):
 
             buckets = [list(zip(*b)) for b in buckets]
 
-            with streamlit.beta_expander(name + ' with frame-slider'):
+            with streamlit.beta_expander(ident_slider_frames):
                 slider = streamlit.slider(f'{name} -- frame buckets of size {size_buckets}', 0, no_buckets - 1)
-                fn(*buckets[slider])
+                figure = fn(title + ident_slider_frames + str(slider), *buckets[slider])
+                streamlit.pyplot(figure)
 
 
-def line(x, name='', name_list=None):
-    if name_list:
-        frame = pandas.DataFrame(
-            numpy.stack(x, axis=1),
-            columns=name_list
-        )
+# why is streamlit this stupid?
+disable_hashing_on = {
+    tuple: (lambda t: hash(t[0])),
 
-    else:
-        frame = pandas.DataFrame({
-            name: x
-        })
-
-    streamlit.line_chart(frame)
+    pandas.DataFrame: (lambda _: None),
+    numpy.ndarray: (lambda _: None),
+    matplotlib.figure.Figure: (lambda _: None),
+    matplotlib.axes._subplots.SubplotBase: (lambda _: None),
+    seaborn.axisgrid.JointGrid: (lambda _: None),
+    matplotlib.axes.Axes: (lambda _: None)
+}
 
 
-def histogram(x, name=''):
+@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
+def line(ident, y, name=''):
     frame = pandas.DataFrame({
-        name: x
+        'episodes': len(y),
+        'name': y
     })
+    episodes = len(y)
+    x = numpy.linspace(0, episodes, episodes)
+    figure, axis = matplotlib.pyplot.subplots()
+    axis.plot(x, y, '-')
 
-    matplotlib.pyplot.figure()
-    plot = seaborn.histplot(frame, x=name)
-    figure = plot.get_figure()
-    streamlit.pyplot(figure)
+    return figure
 
 
-def histogram2d(x, y, x_name='', y_name=''):
+@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
+def histogram(ident, x, name=''):
+    # frame = pandas.DataFrame({
+    #     name: x
+    # })
+
+    # matplotlib.pyplot.figure()
+    # plot = seaborn.histplot(frame, x=name)
+    # figure = plot.get_figure()
+    abc = ident
+    figure, axis = matplotlib.pyplot.subplots()
+    axis.hist(x)
+
+    return figure
+
+
+@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
+def histogram2d(ident, x, y, x_name='', y_name=''):
     frame = pandas.DataFrame({
         x_name: numpy.array(x),
         y_name: numpy.array(y)
@@ -238,10 +275,12 @@ def histogram2d(x, y, x_name='', y_name=''):
     matplotlib.pyplot.figure()
     plot = seaborn.jointplot(data=frame, x=x_name, y=y_name, kind='hex')
     figure = plot.fig
-    streamlit.pyplot(figure)
+
+    return figure
 
 
-def scatter(x, y, x_name='', y_name=''):
+@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
+def scatter(ident, x, y, x_name='', y_name=''):
     frame = pandas.DataFrame({
         x_name: numpy.array(x),
         y_name: numpy.array(y)
@@ -250,23 +289,29 @@ def scatter(x, y, x_name='', y_name=''):
     matplotlib.pyplot.figure()
     plot = seaborn.scatterplot(data=frame, x=x_name, y=y_name)
     figure = plot.get_figure()
-    streamlit.pyplot(figure)
+
+    return figure
 
 
-def tube(x, y):
+@streamlit.cache(allow_output_mutation=True, hash_funcs=disable_hashing_on)
+def tube(ident, x, y):
     episodes = len(x)
     mean = numpy.array(x)
     std = numpy.array(y)
     upper = mean + std
     lower = mean - std
 
+    print('RERUN?')
+
     x = numpy.linspace(0, episodes, episodes)
     figure, axis = matplotlib.pyplot.subplots()
+
+    print(type(axis))
 
     axis.plot(x, mean, '-', alpha=1)
     axis.fill_between(x, upper, lower, alpha=0.5)
 
-    streamlit.pyplot(figure)
+    return figure
 
 
 main()
