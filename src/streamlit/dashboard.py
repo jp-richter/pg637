@@ -9,19 +9,9 @@ import numbers
 
 #
 # Run this script with "streamlit run dashboard.py" from the directory the script is located in. Change the parameters
-# below. The script makes a few assumptions about the format of the json logs, which are listed below. If your logs
-# don't meet these assumptions, update your log files manually or the respective log entries will be omitted.
-#
-#     - The directory your logs are located in should adhere to the naming convention '{methodname}-{char}-{mmdd}', f.e.
-#       'SAC-A-0221'.
-#     - 'Info.json' and 'Logs.json' have to exist in that directory.
-#     - 'Info.json' has to have keys: MethodName, ShortDescription, LongDescription, Notes, Runtime, Hyperparameter. The
-#       method name has to be equal to the name of the base directory.
-#     - 'Logs.json' consists of entries {Log Name}: {'Values': [tuple], 'Framestamps': str, 'Plot Type': str}. The
-#       framestamps value can be set to 'True' or 'False'. For plot types see the logger documentation.
-#     - Depending on the plot type the tuples in the list entry of 'Values' can only be of certain length. If
-#       framestamps is set to 'True', one additional dimension is allowed. If you dont actually want to plot your log
-#       you can use plot type Empty.
+# below. Depending on the plot type the tuples in the list entry of 'Values' can only be of certain length. If
+# framestamps is set to 'True', one additional dimension is allowed. If you dont actually want to plot your log you
+# should use plot type Empty.
 #
 
 LAYOUT = 'wide'  # change this, options are wide and centered
@@ -66,12 +56,12 @@ def load(base_path):
     for folder in folders:
         basename = os.path.basename(folder)
 
-        if not re.match(r'[a-zA-Z0-9]*-[a-zA-Z]-[0-9][0-9][0-9][0-9]', basename):
-            print(f'Error: Folder {folder} does not adhere to the naming convention and will be omitted. Naming '
-                  f'convention is [a-zA-Z0-9]*-[a-zA-Z]-[0-9][0-9][0-9][0-9], f.e. SAC-A-0205, where 0205 is the date'
-                  f'of format mmdd. As we dont store the date somewhere else, this is quite convenient. Suggestions to '
-                  f'change the naming convention are welcome.')
-            continue
+        # if not re.match(r'[a-zA-Z0-9]*-[a-zA-Z]-[0-9][0-9][0-9][0-9]', basename):
+        #     print(f'Error: Folder {folder} does not adhere to the naming convention and will be omitted. Naming '
+        #           f'convention is [a-zA-Z0-9]*-[a-zA-Z]-[0-9][0-9][0-9][0-9], f.e. SAC-A-0205, where 0205 is the date'
+        #           f'of format mmdd. As we dont store the date somewhere else, this is quite convenient. Suggestions
+        #           f'to change the naming convention are welcome.')
+        #     continue
 
         if not os.path.exists(os.path.join(folder, 'Info.json')) or not os.path.exists(
                 os.path.join(folder, 'Logs.json')):
@@ -93,15 +83,19 @@ def load(base_path):
             KEY_HYPERPARAMETERS
         ]
 
-        if not all((k in info.keys() for k in required_keys)):
-            print(f'Error: {folder} does not contain all required data {required_keys} and will be omitted. If you '
-                  f'already run your experiment, add the entries manually to the json file.')
-            continue
+        for key in required_keys:
+            if key not in info.keys():
+                info[key] = ''
 
-        if not basename == info[KEY_METHOD_NAME]:
-            print(f'Error: Folder is named {folder} and method is named {info["MethodName"]}, please stick to the same'
-                  f'naming convention. Suggestions to change the naming convention are welcome. The folder will be '
-                  f'omitted.')
+        # if not all((k in info.keys() for k in required_keys)):
+        #     print(f'Error: {folder} does not contain all required data {required_keys} and will be omitted. If you '
+        #           f'already run your experiment, add the entries manually to the json file.')
+        #     continue
+        #
+        # if not basename == info[KEY_METHOD_NAME]:
+        #     print(f'Error: Folder is named {folder} and method is named {info["MethodName"]}, please stick to the same'
+        #           f'naming convention. Suggestions to change the naming convention are welcome. The folder will be '
+        #           f'omitted.')
 
         allowed_dimensions = {
             'line': 1,
