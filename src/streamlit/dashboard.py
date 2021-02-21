@@ -115,10 +115,10 @@ def load(base_path):
 
                 try:
                     for i in range(len(log[KEY_VALUES])):
-                        log[KEY_VALUES][i] = list(log[KEY_VALUES][i])
+                        log[KEY_VALUES][i] = [log[KEY_VALUES][i]]
                 except Exception as e:
                     print(f'Error: Interpreting entries as 1-dimensional tuples failed, the log will be omitted. '
-                          f'Stacktrace: {e}')
+                          f'Message: {e}')
                     cache.append(name)
                     continue
 
@@ -131,7 +131,7 @@ def load(base_path):
             dimension_actual = len(log[KEY_VALUES][0])
             dimension_allowed = allowed_dimensions[log[KEY_PLOTTYPE]]
 
-            if log[KEY_FRAMESTAMPS] == 'True':  # assumed to be the first dimension
+            if log[KEY_FRAMESTAMPS]:  # assumed to be the first dimension
                 dimension_allowed += 1
 
             if dimension_actual != dimension_allowed: 
@@ -183,13 +183,13 @@ def visualize(title, data):
         fn = functions[log[KEY_PLOTTYPE]]  # see json logger for key
 
         ident = name
-        ident_slider_episodes = name + 'with episode slider'
-        ident_slider_frames = name + 'with frame slider'
+        ident_slider_episodes = name + ' with episode slider'
+        ident_slider_frames = name + ' with frame slider'
 
         logs = log[KEY_VALUES]
         variables = list(zip(*log[KEY_VALUES]))
 
-        if log[KEY_FRAMESTAMPS] == 'True':
+        if log[KEY_FRAMESTAMPS]:
             frames, variables = variables[0], variables[1:]
 
         # normal plots
@@ -212,7 +212,7 @@ def visualize(title, data):
 
         # frame slider plots
 
-        if log[KEY_FRAMESTAMPS] == 'True':
+        if log[KEY_FRAMESTAMPS]:
             max_frame = max(frames)
             no_buckets = 10
             size_buckets = (max_frame // no_buckets) + 1
@@ -226,8 +226,13 @@ def visualize(title, data):
 
             with streamlit.beta_expander(ident_slider_frames):
                 slider = streamlit.slider(f'{name} -- frame buckets of size {size_buckets}', 0, no_buckets - 1)
-                figure = fn(*buckets[slider])
-                streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
+
+                if not [*buckets[slider]]:
+                    streamlit.write('No data for this bucket, probably not the full frame range provided?')
+
+                else:
+                    figure = fn(*buckets[slider])
+                    streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
 
 
 def line(y, name='y'):
