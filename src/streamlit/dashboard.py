@@ -204,11 +204,19 @@ def visualize(title, data):
             with streamlit.beta_expander(ident_slider_episodes):
                 no_partitions = len(logs) // 100
                 partitions = numpy.array_split(logs, no_partitions)
-                partitions = [list(zip(*p))[1:] for p in partitions]  # [1:] skips the frames in [0]
+                partitions = [list(zip(*p)) for p in partitions]
+
+                if log[KEY_FRAMESTAMPS]:
+                    partitions = [p[1:] for p in partitions]
 
                 slider = streamlit.slider(f'{ident} -- episodes * {len(partitions[0])}', 0, len(partitions) - 1)
-                figure = fn(*partitions[slider])
-                streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
+
+                if not [*partitions[slider]]:
+                    streamlit.write('No data for this partition, probably not the full episode range provided?')
+
+                else:
+                    figure = fn(*partitions[slider])
+                    streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
 
         # frame slider plots
 
