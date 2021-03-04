@@ -109,9 +109,14 @@ def load(base_path):
         cache = []
 
         for name, log in logs.items():
+            if len(log[KEY_VALUES]) == 0:
+                print(f'Warning: Found empty log {name}.')
+                cache.append(name)
+                continue
+
             if not type(log[KEY_VALUES][0]) == list:
-                print(f'Warning: Non-tuple type in value log of {name} in {folder}/Logs.json. The entries will be '
-                      f'interpreted as 1-dimensional tuples.')
+                # print(f'Warning: Non-tuple type in value log of {name} in {folder}/Logs.json. The entries will be '
+                #       f'interpreted as 1-dimensional tuples.')
 
                 try:
                     for i in range(len(log[KEY_VALUES])):
