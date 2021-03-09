@@ -207,7 +207,7 @@ def visualize(title, data):
 
         if log[KEY_PLOTTYPE] in with_slider:
             with streamlit.beta_expander(ident_slider_episodes):
-                no_partitions = len(logs) // 100
+                no_partitions = max(len(logs) // 100, 1)
                 partitions = numpy.array_split(logs, no_partitions)
                 partitions = [list(zip(*p)) for p in partitions]
 
