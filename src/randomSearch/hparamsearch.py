@@ -32,7 +32,11 @@ def randomize(key_val_tuple):
     if '{' in val:
         d = json.loads(val)
         exp = generic_random(d["start"], d["end"])
-        val = round(d["val"]**exp, 6)
+        if type(d["val"]) == int:
+            val = int(d["val"]**exp)
+        else:
+            val = round(d["val"]**exp, 6)
+
     elif " - " in val:
         start, end = tuple([num(v) for v in val.split(" - ")])
         val = generic_random(start, end)
@@ -65,26 +69,31 @@ def replace_exp_name(lines, exp_name):
     return result
 
 
-def main(file_path, method, num_exps):
+def main(file_path, method, num_configs, num_seeds):
     with open(file_path) as f:
         lines = f.read().split(";\n")[:-1]
         key_val_tuples = list(map(parse, lines))
-        exp_names = generate_exp_names(method, num_exps)
+        exp_names = generate_exp_names(method, num_configs)
 
         for exp_name in exp_names:
             randomized = list(map(randomize, key_val_tuples))
             lines = list(map(to_str, randomized))
-            lines.append(f'experimentName = "{exp_name}";')
-            outfile_path = f'{exp_name}.cfg'
-            write_to(lines, outfile_path)
+            for seed_no in range(num_seeds):
+                random_seed = random.randint(1, 10000)
+                lines_to_write = lines.copy()
+                lines_to_write.append(f'randomSeed = {random_seed};')
+                lines_to_write.append(f'experimentName = "{exp_name}-{seed_no}";')
+                outfile_path = f'{exp_name}-{seed_no}.cfg'
+                write_to(lines_to_write, outfile_path)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("file_path")
     parser.add_argument("method")
-    parser.add_argument("num_exps", type=int)
+    parser.add_argument("num_configs", type=int)
+    parser.add_argument("num_seeds", type=int)
     args = parser.parse_args()
-    assert(args.num_exps <= 24)
-    main(args.file_path, args.method, args.num_exps)
+    assert(args.num_configs <= 24)
+    main(args.file_path, args.method, args.num_configs, args.num_seeds)
     
