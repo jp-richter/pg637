@@ -4,7 +4,8 @@ import numpy
 import json
 import pandas
 import os
-import re
+import math
+import statistics
 import numbers
 
 #
@@ -17,6 +18,7 @@ import numbers
 LAYOUT = 'wide'  # change this, options are wide and centered
 PATH = './'  # change this, this is the path to the folder containing the experiments
 FILL_BROWSER_WIDTH = True  # iff true, the plots will expand to the full length of your browser window
+values_per_figure = 1000  # mutated by slider
 
 # keys used in the json log, dont change anything below
 
@@ -29,18 +31,29 @@ KEY_HYPERPARAMETERS = 'Hyperparameter'
 KEY_VALUES = 'Values'
 KEY_FRAMESTAMPS = 'Framestamps'
 KEY_PLOTTYPE = 'Plot Type '
+KEY_LENGTH = 'Length'
 
 
 def main():
+    global values_per_figure
+
     streamlit.set_page_config(layout=LAYOUT)
 
     experiment_folders = [os.path.basename(f.path) for f in os.scandir(PATH) if f.is_dir()]
     experiment_chosen = streamlit.sidebar.selectbox('Choose an experiment!', experiment_folders)
+    values_per_figure = streamlit.sidebar.number_input('Values Per Plot', 1000, 10000, 1000, 1000)
 
     streamlit.title(experiment_chosen)
 
     name, data = load(experiment_chosen)
-    visualize(data)
+    smoothed_logs_partitioning = smooth(data)
+
+    # to allow streamlit caching of load() mutating the data dict directly is not possible :( its a
+    # partitioning, e.g. instead of log its [log], since this is uniform with the possible partitionings
+    # we create when using the frame or episode sliders. we put it inside a list in load because it might
+    # be computationally expensive and we want to avoid doing it possibly multiple times in visualize()
+
+    visualize(data, smoothed_logs_partitioning)
 
 
 @streamlit.cache
@@ -87,12 +100,12 @@ def load(folder):
         'Empty': 999999999
     }
 
-    cache = []
+    to_delete = []
 
     for name, log in logs.items():
         if len(log[KEY_VALUES]) == 0:
             print(f'Warning: Found empty log {name}.')
-            cache.append(name)
+            to_delete.append(name)
             continue
 
         if not type(log[KEY_VALUES][0]) == list:
@@ -105,13 +118,13 @@ def load(folder):
             except Exception as e:
                 print(f'Error: Interpreting entries as 1-dimensional tuples failed, the log will be omitted. '
                       f'Message: {e}')
-                cache.append(name)
+                to_delete.append(name)
                 continue
 
         if not isinstance(log[KEY_VALUES][0][0], numbers.Number):
             print(f'Warning: Non-number type in value log of {name} in {folder}/Logs.json, found type '
                   f'{type(log[KEY_VALUES][0][0])} instead. Log will be omitted.')
-            cache.append(name)
+            to_delete.append(name)
             continue
 
         dimension_actual = len(log[KEY_VALUES][0])
@@ -126,9 +139,17 @@ def load(folder):
                   f'with dimension {dimension_allowed}. The log for {name} will not be visualized.')
 
         if dimension_actual != dimension_allowed or log[KEY_PLOTTYPE] == 'Empty':
-            cache.append(name)
+            to_delete.append(name)
+            continue
 
-    for key in cache:
+        # logs contain lists of values for each time step, we need lists of time steps for each value
+        log[KEY_VALUES] = list(zip(*log[KEY_VALUES]))
+
+        # later on we treat this log as partitioning with a single partition, i.e. we put it in a list. to avoid
+        # doing this potentially multiple times, we do it here once
+        log[KEY_VALUES] = [log[KEY_VALUES]]
+
+    for key in to_delete:
         del logs[key]
 
     return info[KEY_METHOD_NAME], {
@@ -141,7 +162,34 @@ def load(folder):
     }
 
 
-def visualize(data):
+@streamlit.cache
+def smooth(data):
+    smoothed_logs_partitioning = {}
+
+    for name, log in data['logs'].items():
+        partitioning = log[KEY_VALUES]
+        no_datapoints = len(partitioning[0][0])  # some variable of single complete partition
+        log[KEY_LENGTH] = no_datapoints
+
+        if not no_datapoints > values_per_figure:
+            log[KEY_VALUES] = log[KEY_VALUES]
+            continue
+
+        smoothed_logs_partitioning[name] = [[]]  # partitioning with one empty partition
+        smoothing_window = no_datapoints // values_per_figure
+
+        for v, variable in enumerate(partitioning[0]):
+            log[KEY_VALUES][0].append([])
+
+            for i in range(values_per_figure):
+                index = i * smoothing_window
+                mean = statistics.mean(variable[index:index + smoothing_window])
+                smoothed_logs_partitioning[name][0][v].append(mean)
+
+    return smoothed_logs_partitioning
+
+
+def visualize(data, smoothed_logs_partitioning):
     streamlit.markdown('''
     ## Runtime: {}
     ## Description
@@ -161,94 +209,103 @@ def visualize(data):
         'tube': tube
     }
 
-    with_slider = ['histogram', 'histogram2d']
-
     for name, log in data['logs'].items():
+        streamlit.markdown('''## {}'''.format(name))
+
         fn = functions[log[KEY_PLOTTYPE]]  # see json logger for key
-
-        ident = name
-        ident_slider_episodes = name + ' with episode slider'
-        ident_slider_frames = name + ' with frame slider'
-
-        logs = log[KEY_VALUES]
-        variables = list(zip(*log[KEY_VALUES]))
+        partitioning = smoothed_logs_partitioning[name][KEY_VALUES]  # partitioning with a single partition
 
         if log[KEY_FRAMESTAMPS]:
-            frames, variables = variables[0], variables[1:]
+            frames = partitioning[0][0]
+            del partitioning[0][0]
 
-        # normal plots
+        variables = partitioning[0]
+        no_episodes = len(variables[0])
 
-        with streamlit.beta_expander(ident):
-            figure = fn(*variables)
+        # if fn in ['histogram', 'histogram2d'] and streamlit.checkbox('Show episode slider'):
+        #     no_buckets = min(100, no_episodes)
+        #     sizeof_buckets = max(no_episodes // no_buckets, 1)
+        #     chosen_bucket = streamlit.slider(f'{name}: Choose one of {no_buckets}', 0, no_buckets - 1)
+        #
+        # else:
+
+        sizeof_buckets = no_episodes
+        chosen_bucket = 0
+        partitioning = partition(partitioning, variables, no_episodes, sizeof_buckets)
+
+        if not [*partitioning[chosen_bucket]]:
+            streamlit.write('No data for this partition, how can this happen?')
+
+        # hier koennte man die frame slider einbauen, der dann nur auf der partition funktioniert
+
+        # max_frame = max(frames)
+        # no_buckets = 10
+        # size_buckets = (max_frame // no_buckets) + 1
+        # buckets = [[] for _ in range(no_buckets)]
+        #
+        # for entry in logs:
+        #     bucket = int((entry[0] // size_buckets)) - 1
+        #     buckets[bucket].append(entry[1:])
+
+        # streamlit creates all this once and never again (what is caching for?)
+
+        else:
+            figure = fn(*partitioning[chosen_bucket])
             streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
 
-        # episode slider plots
 
-        if log[KEY_PLOTTYPE] in with_slider:
-            with streamlit.beta_expander(ident_slider_episodes):
-                no_partitions = max(len(logs) // 100, 1)
-                partitions = numpy.array_split(logs, no_partitions)
-                partitions = [list(zip(*p)) for p in partitions]
+@streamlit.cache
+def partition(partitioning, variables, no_episodes, sizeof_buckets):
+    if math.ceil(no_episodes / sizeof_buckets) == len(partitioning):
+        return partitioning
 
-                if log[KEY_FRAMESTAMPS]:
-                    partitions = [p[1:] for p in partitions]
+    partitioning = []
 
-                slider = streamlit.slider(f'{ident} -- episodes * {len(partitions[0])}', 0, len(partitions) - 1)
+    for i in range(no_episodes):
+        if i % sizeof_buckets == 0:
+            partitioning.append([[] for _ in range(len(variables))])
 
-                if not [*partitions[slider]]:
-                    streamlit.write('No data for this partition, probably not the full episode range provided?')
+        for j in range(len(variables)):
+            partitioning[-1][j].append(variables[j][i])
 
-                else:
-                    figure = fn(*partitions[slider])
-                    streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
-
-        # frame slider plots
-
-        if log[KEY_FRAMESTAMPS]:
-            max_frame = max(frames)
-            no_buckets = 10
-            size_buckets = (max_frame // no_buckets) + 1
-            buckets = [[] for _ in range(no_buckets)]
-
-            for entry in logs:
-                bucket = int((entry[0] // size_buckets)) - 1
-                buckets[bucket].append(entry[1:])
-
-            buckets = [list(zip(*b)) for b in buckets]
-
-            with streamlit.beta_expander(ident_slider_frames):
-                slider = streamlit.slider(f'{name} -- frame buckets of size {size_buckets}', 0, no_buckets - 1)
-
-                if not [*buckets[slider]]:
-                    streamlit.write('No data for this bucket, probably not the full frame range provided?')
-
-                else:
-                    figure = fn(*buckets[slider])
-                    streamlit.altair_chart(figure, use_container_width=FILL_BROWSER_WIDTH)
+    return partitioning
 
 
-def line(y, name='y'):
-    frame = pandas.DataFrame({
+@streamlit.cache
+def build_line_dataframe(y, name):
+    return pandas.DataFrame({
         'episodes': numpy.linspace(0, len(y), len(y)),
         name: numpy.array(y)
     })
 
+
+def line(y, name='y'):
+    frame = build_line_dataframe(y, name)
     return altair.Chart(frame).mark_line().encode(x='episodes', y=name)
 
 
-def histogram(x, name='x'):
-    frame = pandas.DataFrame({
+@streamlit.cache
+def build_histogram_dataframe(x, name):
+    return pandas.DataFrame({
         name: numpy.array(x),
     })
 
+
+def histogram(x, name='x'):
+    frame = build_histogram_dataframe(x, name)
     return altair.Chart(frame).mark_bar().encode(x=altair.X(name + '', bin=True), y='count()')
 
 
-def histogram2d(x, y, x_name='x', y_name='y'):
-    frame = pandas.DataFrame({
+@streamlit.cache
+def build_histogram2d_dataframe(x, y, x_name, y_name):
+    return pandas.DataFrame({
         x_name: numpy.array(x),
         y_name: numpy.array(y)
     })
+
+
+def histogram2d(x, y, x_name='x', y_name='y'):
+    frame = build_histogram2d_dataframe(x, y, x_name, y_name)
 
     # plot = altair.Chart(frame).mark_circle().encode(
     #     altair.X(x_name, bin=True),
@@ -265,11 +322,16 @@ def histogram2d(x, y, x_name='x', y_name='y'):
     return plot
 
 
-def scatter(x, y, x_name='x', y_name='y'):
-    frame = pandas.DataFrame({
+@streamlit.cache
+def build_scatter_dataframe(x, y, x_name, y_name):
+    return pandas.DataFrame({
         x_name: numpy.array(x),
         y_name: numpy.array(y)
     })
+
+
+def scatter(x, y, x_name='x', y_name='y'):
+    frame = build_scatter_dataframe(x, y, x_name, y_name)
 
     plot = altair.Chart(frame).mark_circle(size=60).encode(
         x=x_name,
@@ -281,16 +343,21 @@ def scatter(x, y, x_name='x', y_name='y'):
     return plot
 
 
-def tube(x, y, x_name='x', y_name='y'):
+@streamlit.cache
+def build_tube_dataframe(x, y, x_name, y_name):
     x_array = numpy.array(x)
     y_array = numpy.array(y)
 
-    frame = pandas.DataFrame({
+    return pandas.DataFrame({
         'episodes': numpy.linspace(0, len(x), len(x)),
         x_name: x_array,
         'lower': x_array - y_array,
         'upper': x_array + y_array
     })
+
+
+def tube(x, y, x_name='x', y_name='y'):
+    frame = build_tube_dataframe(x, y, x_name, y_name)
 
     line = altair.Chart(frame).mark_line().encode(
         x='episodes',
