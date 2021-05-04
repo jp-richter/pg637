@@ -15,10 +15,9 @@ import numbers
 # should use plot type Empty.
 #
 
-LAYOUT = 'wide'  # change this, options are wide and centered
+LAYOUT = 'wide'  # change this, options are wide and centered, has effect on plot sitze
 PATH = './'  # change this, this is the path to the folder containing the experiments
 FILL_BROWSER_WIDTH = True  # iff true, the plots will expand to the full length of your browser window
-values_per_figure = 1000  # mutated by slider
 
 # keys used in the json log, dont change anything below
 
@@ -32,11 +31,12 @@ KEY_VALUES = 'Values'
 KEY_FRAMESTAMPS = 'Framestamps'
 KEY_PLOTTYPE = 'Plot Type '
 KEY_LENGTH = 'Length'
+KEY_COMPRESSING = 'Compressing'
+KEY_QUANTILE_UPPER = 'Quantile Upper'
+KEY_QUANTILE_LOWER = 'Quantile Lower'
 
 
 def main():
-    global values_per_figure
-
     streamlit.set_page_config(layout=LAYOUT)
 
     experiment_folders = [os.path.basename(f.path) for f in os.scandir(PATH) if f.is_dir()]
@@ -46,14 +46,9 @@ def main():
     streamlit.title(experiment_chosen)
 
     name, data = load(experiment_chosen)
-    smoothed_logs_partitioning = smooth(data)
+    preprocessed_logs = preprocess(data['logs'], values_per_figure)  # extract from load for independant caching
 
-    # to allow streamlit caching of load() mutating the data dict directly is not possible :( its a
-    # partitioning, e.g. instead of log its [log], since this is uniform with the possible partitionings
-    # we create when using the frame or episode sliders. we put it inside a list in load because it might
-    # be computationally expensive and we want to avoid doing it possibly multiple times in visualize()
-
-    visualize(data, smoothed_logs_partitioning)
+    visualize(data, preprocessed_logs)
 
 
 @streamlit.cache
@@ -81,73 +76,20 @@ def load(folder):
         if key not in info.keys():
             info[key] = ''
 
-    # if not all((k in info.keys() for k in required_keys)):
-    #     print(f'Error: {folder} does not contain all required data {required_keys} and will be omitted. If you '
-    #           f'already run your experiment, add the entries manually to the json file.')
-    #     continue
-    #
-    # if not basename == info[KEY_METHOD_NAME]:
-    #     print(f'Error: Folder is named {folder} and method is named {info["MethodName"]}, please stick to the same'
-    #           f'naming convention. Suggestions to change the naming convention are welcome. The folder will be '
-    #           f'omitted.')
-
-    allowed_dimensions = {
-        'line': 1,
-        'histogram': 1,
-        'histogram2d': 2,
-        'scatter': 2,
-        'tube': 2,
-        'Empty': 999999999
-    }
-
     to_delete = []
 
     for name, log in logs.items():
-        if len(log[KEY_VALUES]) == 0:
-            print(f'Warning: Found empty log {name}.')
+        if break_on_empty_log(name, log) \
+                or break_on_non_tuple_type(name, log) \
+                or break_on_non_number_input(name, log, folder) \
+                or break_on_wrong_dimensions(name, log, folder):
+
             to_delete.append(name)
             continue
 
-        if not type(log[KEY_VALUES][0]) == list:
-            # print(f'Warning: Non-tuple type in value log of {name} in {folder}/Logs.json. The entries will be '
-            #       f'interpreted as 1-dimensional tuples.')
-
-            try:
-                for i in range(len(log[KEY_VALUES])):
-                    log[KEY_VALUES][i] = [log[KEY_VALUES][i]]
-            except Exception as e:
-                print(f'Error: Interpreting entries as 1-dimensional tuples failed, the log will be omitted. '
-                      f'Message: {e}')
-                to_delete.append(name)
-                continue
-
-        if not isinstance(log[KEY_VALUES][0][0], numbers.Number):
-            print(f'Warning: Non-number type in value log of {name} in {folder}/Logs.json, found type '
-                  f'{type(log[KEY_VALUES][0][0])} instead. Log will be omitted.')
-            to_delete.append(name)
-            continue
-
-        dimension_actual = len(log[KEY_VALUES][0])
-        dimension_allowed = allowed_dimensions[log[KEY_PLOTTYPE]]
-
-        if log[KEY_FRAMESTAMPS]:  # assumed to be the first dimension
-            dimension_allowed += 1
-
-        if dimension_actual != dimension_allowed:
-            print(f'Warning: The variable {name} in {folder}/Logs.json has dimensions {dimension_actual} and plot '
-                  f'type {log[KEY_PLOTTYPE]} with Framestamps={log[KEY_FRAMESTAMPS]}, which allows only entries '
-                  f'with dimension {dimension_allowed}. The log for {name} will not be visualized.')
-
-        if dimension_actual != dimension_allowed or log[KEY_PLOTTYPE] == 'Empty':
-            to_delete.append(name)
-            continue
-
-        # logs contain lists of values for each time step, we need lists of time steps for each value
+        # logs contain tuples of values for each time step, we need a list for each variable with length time steps.
+        # this is basically a translation of the matrix
         log[KEY_VALUES] = list(zip(*log[KEY_VALUES]))
-
-        # later on we treat this log as partitioning with a single partition, i.e. we put it in a list. to avoid
-        # doing this potentially multiple times, we do it here once
-        log[KEY_VALUES] = [log[KEY_VALUES]]
 
     for key in to_delete:
         del logs[key]
@@ -163,33 +105,44 @@ def load(folder):
 
 
 @streamlit.cache
-def smooth(data):
-    smoothed_logs_partitioning = {}
+def preprocess(logs, values_per_figure):
+    preprocessed_logs = {}
 
-    for name, log in data['logs'].items():
-        partitioning = log[KEY_VALUES]
-        no_datapoints = len(partitioning[0][0])  # some variable of single complete partition
-        log[KEY_LENGTH] = no_datapoints
+    for name, log in logs.items():
+        smoothed = {
+            KEY_VALUES: [],
+            KEY_FRAMESTAMPS: log[KEY_FRAMESTAMPS],
+            KEY_PLOTTYPE: log[KEY_PLOTTYPE]
+        }
 
-        if not no_datapoints > values_per_figure:
-            log[KEY_VALUES] = log[KEY_VALUES]
-            continue
+        assert len(log.keys()) == len(smoothed.keys())
 
-        smoothed_logs_partitioning[name] = [[]]  # partitioning with one empty partition
-        smoothing_window = no_datapoints // values_per_figure
+        variables = log[KEY_VALUES]
+        no_datapoints = len(variables[0])  # some variable
+        smoothed[KEY_LENGTH] = no_datapoints
 
-        for v, variable in enumerate(partitioning[0]):
-            log[KEY_VALUES][0].append([])
+        if no_datapoints <= values_per_figure:
+            smoothed[KEY_VALUES] = log[KEY_VALUES]  # cheap reference
+            smoothed[KEY_COMPRESSING] = 1
 
-            for i in range(values_per_figure):
-                index = i * smoothing_window
-                mean = statistics.mean(variable[index:index + smoothing_window])
-                smoothed_logs_partitioning[name][0][v].append(mean)
+        else:
+            smoothing_window = no_datapoints // values_per_figure
+            smoothed[KEY_COMPRESSING] = smoothing_window
 
-    return smoothed_logs_partitioning
+            for v, variable in enumerate(variables):
+                smoothed[KEY_VALUES].append([])
+
+                for i in range(values_per_figure):
+                    index = i * smoothing_window
+                    mean = statistics.mean(variable[index:index + smoothing_window])
+                    smoothed[KEY_VALUES][v].append(mean)
+
+        preprocessed_logs[name] = smoothed  # append ro result
+
+    return preprocessed_logs
 
 
-def visualize(data, smoothed_logs_partitioning):
+def visualize(data, preprocessed_logs):
     streamlit.markdown('''
     ## Runtime: {}
     ## Description
@@ -211,16 +164,16 @@ def visualize(data, smoothed_logs_partitioning):
 
     for name, log in data['logs'].items():
         streamlit.markdown('''## {}'''.format(name))
+        streamlit.markdown('''Compressing Factor: x{}'''.format(preprocessed_logs[name][KEY_COMPRESSING]))
 
         fn = functions[log[KEY_PLOTTYPE]]  # see json logger for key
-        partitioning = smoothed_logs_partitioning[name][KEY_VALUES]  # partitioning with a single partition
+        preprocessed_log = preprocessed_logs[name]
+        variables = preprocessed_log[KEY_VALUES]
 
         if log[KEY_FRAMESTAMPS]:
-            frames = partitioning[0][0]
-            del partitioning[0][0]
+            frames, variables = variables[0], variables[1:]
 
-        variables = partitioning[0]
-        no_episodes = len(variables[0])
+        no_values_per_variable = len(variables[0])  # just some variable
 
         # if fn in ['histogram', 'histogram2d'] and streamlit.checkbox('Show episode slider'):
         #     no_buckets = min(100, no_episodes)
@@ -229,9 +182,9 @@ def visualize(data, smoothed_logs_partitioning):
         #
         # else:
 
-        sizeof_buckets = no_episodes
+        sizeof_buckets = no_values_per_variable
         chosen_bucket = 0
-        partitioning = partition(partitioning, variables, no_episodes, sizeof_buckets)
+        partitioning = partition(variables, no_values_per_variable, sizeof_buckets)
 
         if not [*partitioning[chosen_bucket]]:
             streamlit.write('No data for this partition, how can this happen?')
@@ -255,13 +208,13 @@ def visualize(data, smoothed_logs_partitioning):
 
 
 @streamlit.cache
-def partition(partitioning, variables, no_episodes, sizeof_buckets):
-    if math.ceil(no_episodes / sizeof_buckets) == len(partitioning):
-        return partitioning
+def partition(variables, no_values_per_variable, sizeof_buckets):
+    if no_values_per_variable == sizeof_buckets:
+        return [variables]
 
     partitioning = []
 
-    for i in range(no_episodes):
+    for i in range(no_values_per_variable):
         if i % sizeof_buckets == 0:
             partitioning.append([[] for _ in range(len(variables))])
 
@@ -274,14 +227,14 @@ def partition(partitioning, variables, no_episodes, sizeof_buckets):
 @streamlit.cache
 def build_line_dataframe(y, name):
     return pandas.DataFrame({
-        'episodes': numpy.linspace(0, len(y), len(y)),
+        't': numpy.linspace(0, len(y), len(y)),
         name: numpy.array(y)
     })
 
 
 def line(y, name='y'):
     frame = build_line_dataframe(y, name)
-    return altair.Chart(frame).mark_line().encode(x='episodes', y=name)
+    return altair.Chart(frame).mark_line().encode(x='t', y=name)
 
 
 @streamlit.cache
@@ -349,7 +302,7 @@ def build_tube_dataframe(x, y, x_name, y_name):
     y_array = numpy.array(y)
 
     return pandas.DataFrame({
-        'episodes': numpy.linspace(0, len(x), len(x)),
+        't': numpy.linspace(0, len(x), len(x)),
         x_name: x_array,
         'lower': x_array - y_array,
         'upper': x_array + y_array
@@ -360,17 +313,78 @@ def tube(x, y, x_name='x', y_name='y'):
     frame = build_tube_dataframe(x, y, x_name, y_name)
 
     line = altair.Chart(frame).mark_line().encode(
-        x='episodes',
+        x='t',
         y=x_name
     )
 
     band = altair.Chart(frame).mark_area(opacity=0.5).encode(
-        x='episodes',
+        x='t',
         y='lower',
         y2='upper'
     )
 
     return band + line
+
+
+def break_on_empty_log(name, log):
+    if len(log[KEY_VALUES]) == 0:
+        print(f'Warning: Found empty log {name}.')
+        return True
+
+    return False
+
+
+def break_on_non_tuple_type(name, log):
+    if not type(log[KEY_VALUES][0]) == list:
+        # print(f'Warning: Non-tuple type in value log of {name} in {folder}/Logs.json. The entries will be '
+        #       f'interpreted as 1-dimensional tuples.')
+
+        try:
+            for i in range(len(log[KEY_VALUES])):
+                log[KEY_VALUES][i] = [log[KEY_VALUES][i]]
+        except Exception as e:
+            print(f'Error: Interpreting entries as 1-dimensional tuples failed, the log will be omitted. '
+                  f'Message: {e}')
+            return True
+
+    return False
+
+
+def break_on_non_number_input(name, log, folder):
+    if not isinstance(log[KEY_VALUES][0][0], numbers.Number):
+        print(f'Warning: Non-number type in value log of {name} in {folder}/Logs.json, found type '
+              f'{type(log[KEY_VALUES][0][0])} instead. Log will be omitted.')
+        return True
+
+    return False
+
+
+allowed_dimensions = {
+    'line': 1,
+    'histogram': 1,
+    'histogram2d': 2,
+    'scatter': 2,
+    'tube': 2,
+    'Empty': 999999999
+}
+
+
+def break_on_wrong_dimensions(name, log, folder):
+    dimension_actual = len(log[KEY_VALUES][0])
+    dimension_allowed = allowed_dimensions[log[KEY_PLOTTYPE]]
+
+    if log[KEY_FRAMESTAMPS]:  # assumed to be the first dimension
+        dimension_allowed += 1
+
+    if dimension_actual != dimension_allowed:
+        print(f'Warning: The variable {name} in {folder}/Logs.json has dimensions {dimension_actual} and plot '
+              f'type {log[KEY_PLOTTYPE]} with Framestamps={log[KEY_FRAMESTAMPS]}, which allows only entries '
+              f'with dimension {dimension_allowed}. The log for {name} will not be visualized.')
+
+    if dimension_actual != dimension_allowed or log[KEY_PLOTTYPE] == 'Empty':
+        return True
+
+    return False
 
 
 main()
