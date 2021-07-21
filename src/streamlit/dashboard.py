@@ -82,6 +82,7 @@ KEY_QUANTILE_LOWER = 'Lower Quantile Values'
 KEY_X_AXIS = 'X Axis Name'
 KEY_Y_AXIS = 'Y Axis Name'
 KEY_DIMENSIONS = 'Dim'
+KEY_UNIQUE_FRAMES = 'Unique Frames'
 
 HELP_MESSAGE = '''
     * Logs with to many data points will be compressed to 1000 values per variable. Compression is done by taking the
@@ -116,7 +117,7 @@ def main():
 
     streamlit.title(experiment_chosen)
 
-    data = load(experiment_chosen)  # see at the top of the script for doc
+    data = load('00405-7-PPOCoDeg-MultipleAnglesAndTwoActions-2')  # see at the top of the script for doc
     visualize(data)
 
 
@@ -131,6 +132,7 @@ def load(folder):
         preprocess_sanitize_keys(data)
         preprocess_translate_logs(data)
         preprocess_extract_framestamps(data)
+        preprocess_remove_framestamp_outlier(data)
         preprocess_smooth_logs(data)
         preprocess_save(data, folder)
 
@@ -156,6 +158,7 @@ def preprocess_load(folder):
         logs = json.load(file)
 
     info[KEY_LOGS_RAW] = logs
+
     return info, False
 
 
@@ -290,6 +293,37 @@ def preprocess_extract_framestamps(data):
             log[KEY_VALUES] = log[KEY_VALUES][1:]
 
 
+def preprocess_remove_framestamp_outlier(data):
+    for name, log in data[KEY_LOGS_RAW].items():
+        if not log[KEY_FRAMESTAMPS]:
+            continue
+
+        unique_frames = list(set(log[KEY_FRAMESTAMP_VALUES]))
+        unique_frame_count = [0 for _ in unique_frames]
+
+        for frame in log[KEY_FRAMESTAMP_VALUES]:
+            unique_frame_count[unique_frames.index(frame)] += 1
+
+        outlier = []
+
+        for count, unique_frame in zip(unique_frames, unique_frame_count):
+            if count < max(unique_frame_count):
+                outlier.append(unique_frame)
+
+        to_remove = []
+
+        for i in range(len(log[KEY_VALUES])):
+            if log[KEY_FRAMESTAMP_VALUES] in outlier:
+                to_remove.append(i)
+
+        if to_remove:
+            print(f'Found frame outliers in {name}: {to_remove}')
+
+        for index in to_remove:
+            del log[KEY_VALUES][index]
+            del log[KEY_FRAMESTAMP_VALUES][index]
+
+
 def preprocess_smooth_logs(data):
     for name, log in data[KEY_LOGS_RAW].items():
         if log[KEY_LENGTH] < NO_VALUES_PER_VARIABLE:
@@ -303,51 +337,38 @@ def preprocess_smooth_logs(data):
             KEY_QUANTILE_UPPER: [[] for _ in range(len(log[KEY_VALUES]))],
             KEY_QUANTILE_LOWER: [[] for _ in range(len(log[KEY_VALUES]))],
             KEY_FRAMESTAMPS: log[KEY_FRAMESTAMPS],
+            KEY_FRAMESTAMP_VALUES: list(log[KEY_FRAMESTAMP_VALUES]),
             KEY_PLOTTYPE: log[KEY_PLOTTYPE],
             KEY_X_AXIS: log[KEY_X_AXIS],
             KEY_Y_AXIS: log[KEY_Y_AXIS],
             KEY_COMPRESSION: sliding_window
         }
 
-        for v, variable in enumerate(log[KEY_VALUES]):
-            if copy[KEY_PLOTTYPE] in ['histogram', 'histogram2d']:
-                maximum = max(log[KEY_VALUES][v])
-                minimum = min(log[KEY_VALUES][v])
-                interval = (maximum - minimum) / 10000
-                classes = [[] for _ in range(1000)]
+        if log[KEY_FRAMESTAMPS]:
+            unique_frames = set(log[KEY_FRAMESTAMP_VALUES])
+            copy[KEY_UNIQUE_FRAMES] = list(unique_frames)
+            splitter = len(unique_frames)
+        else:
+            splitter = 1  # equals no split
 
+        for v, variable in enumerate(log[KEY_VALUES]):
             for i in range(NO_VALUES_PER_VARIABLE):
                 index = i * sliding_window
 
-                if copy[KEY_PLOTTYPE] in ['histogram', 'histogram2d']:
-                    for value in variable[index:min(index+sliding_window, log[KEY_LENGTH] - 1)]:
-                        vclass = min(math.floor((value - minimum) / interval), 999)
-                        # print(value)
-                        # print(minimum)
-                        # print(interval)
-                        # print(vclass)
-                        classes[vclass].append(value)
+                window_for_frame = variable[index:][::splitter]
+                window_for_frame = window_for_frame[:min(sliding_window, len(window_for_frame))]
 
-                    mode = -1
-                    size = -1
-                    for j, c in enumerate(classes):
-                        if len(c) > size:
-                            mode = j
-                            size = len(c)
+                mean = statistics.mean(window_for_frame)
+                copy[KEY_VALUES][v].append(mean)
 
-                    copy[KEY_VALUES][v].append(statistics.mean(classes[mode]))
-                    classes = [[] for _ in range(1000)]
+                if log[KEY_FRAMESTAMPS]:
+                    copy[KEY_FRAMESTAMP_VALUES].append(log[KEY_FRAMESTAMP_VALUES][i])
 
-                else:
-                    mean = statistics.mean(variable[index:index + sliding_window])
-                    copy[KEY_VALUES][v].append(mean)
-
-                    if log[KEY_PLOTTYPE] == 'line':
-                        upper, lower = numpy.quantile(
-                            variable[index:index + sliding_window],
-                            [QUANTILE_UPPER, QUANTILE_LOWER])
-                        copy[KEY_QUANTILE_UPPER][v].append(upper)
-                        copy[KEY_QUANTILE_LOWER][v].append(lower)
+                upper, lower = numpy.quantile(
+                    variable[index:index + sliding_window],
+                    [QUANTILE_UPPER, QUANTILE_LOWER])
+                copy[KEY_QUANTILE_UPPER][v].append(upper)
+                copy[KEY_QUANTILE_LOWER][v].append(lower)
 
         copy[KEY_LENGTH] = len(copy[KEY_VALUES][0])
         data[KEY_LOGS_PROCESSED][name] = copy
@@ -384,9 +405,9 @@ def visualize(data):
         if c2.checkbox(f'Episode Slider ID{idx}'):  # if plot type in ['histogram', 'histogram2d']
             slider_episodes = True
 
-        # if c3.checkbox(f'Frame Slider ID{idx}'):
-        #     slider_frames = True
-        #     slider_episodes = False
+        if c3.checkbox(f'Frame Slider ID{idx}'):
+            slider_frames = True
+            slider_episodes = False
 
         c4.markdown('''Compression Factor: x{}'''.format(log[KEY_COMPRESSION]))
 
@@ -420,20 +441,28 @@ def compute_figure(name, log, slider_episodes, slider_frames):
     partitioning = partition(log[KEY_VALUES], log[KEY_LENGTH], buckets_size)
 
     if not [*partitioning[bucket_chosen]]:
+        streamlit.write('This bucket seems to be empty..')
         return None
 
-    # hier koennte man die frame slider einbauen, der dann nur auf der partition funktioniert
+    if slider_frames:
+        if slider_episodes:
+            streamlit.write('Please disable episode slider!')
+            return None
 
-    # max_frame = max(frames)
-    # no_buckets = 10
-    # size_buckets = (max_frame // no_buckets) + 1
-    # buckets = [[] for _ in range(no_buckets)]
-    #
-    # for entry in logs:
-    #     bucket = int((entry[0] // size_buckets)) - 1
-    #     buckets[bucket].append(entry[1:])
+        if not log[KEY_FRAMESTAMPS]:
+            streamlit.write('No Framestamps found for this log..')
+            return None
 
-    # streamlit creates all this once and never again (what is caching for?)
+        log[KEY_UNIQUE_FRAMES].sort()
+        frame_chosen = streamlit.selectbox(f'{name}: Choose a frame', log[KEY_UNIQUE_FRAMES])
+
+        result = []
+        for i in range(len(partitioning[bucket_chosen][0])):
+            if log[KEY_FRAMESTAMP_VALUES][i] == frame_chosen:
+                result.append(partitioning[bucket_chosen][0][i])
+
+        partitioning[bucket_chosen][0] = result
+        # TODO test this
 
     return fn(*partitioning[bucket_chosen], x_name=log[KEY_X_AXIS], y_name=log[KEY_Y_AXIS])
 
