@@ -117,7 +117,7 @@ def main():
 
     streamlit.title(experiment_chosen)
 
-    data = load('00405-7-PPOCoDeg-MultipleAnglesAndTwoActions-2')  # see at the top of the script for doc
+    data = load(experiment_chosen)  # see at the top of the script for doc
     visualize(data)
 
 
