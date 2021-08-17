@@ -17,6 +17,7 @@ NO_EPISODE_BUCKETS = 10
 NO_VALUES_PER_VARIABLE = 1000  # compression factor, number of values per variable per plot
 QUANTILE_UPPER = 0.95
 QUANTILE_LOWER = 0.5
+ADAPTIVE_Y_DOMAIN = True
 
 
 # Run this script with "streamlit run dashboard.py" from the directory the script is located in. Change the parameters
@@ -499,6 +500,10 @@ def build_line_dataframe(y, x_name, y_name):
 
 def line(y, x_name='x', y_name='y'):
     frame = build_line_dataframe(y, x_name, y_name)
+    if ADAPTIVE_Y_DOMAIN:
+        return altair.Chart(frame).mark_line().encode(
+            x=x_name, y=altair.Y(y_name, scale=altair.Scale(zero=False)))
+
     return altair.Chart(frame).mark_line().encode(x=x_name, y=y_name)
 
 
