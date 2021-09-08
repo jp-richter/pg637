@@ -10,9 +10,9 @@ import math
 import timeit
 
 
-LAYOUT = 'wide'  # options are wide and centered, has effect on plot sitze
+LAYOUT = 'centered'  # options are wide and centered, has effect on plot sitze
 PATH = './'  # this is the path to the folder containing the experiments
-FILL_BROWSER_WIDTH = True  # iff true, the plots will expand to the full length of your browser window
+FILL_BROWSER_WIDTH = False  # iff true, the plots will expand to the full length of your browser window
 NO_EPISODE_BUCKETS = 10
 NO_VALUES_PER_VARIABLE = 1000  # compression factor, number of values per variable per plot
 QUANTILE_UPPER = 0.95
@@ -113,7 +113,7 @@ def main():
     experiment_folders = [os.path.basename(f.path) for f in os.scandir(PATH) if f.is_dir()]
     experiment_chosen = streamlit.sidebar.selectbox('Choose an experiment!', experiment_folders)
 
-    with streamlit.sidebar.beta_expander('Click here for some info and tipps!'):
+    with streamlit.sidebar.expander('Click here for some info and tipps!'):
         streamlit.markdown(HELP_MESSAGE)
 
     streamlit.title(experiment_chosen)
@@ -377,19 +377,19 @@ def preprocess_smooth_logs(data):
 
 def preprocess_save(data, folder):
     with open(os.path.join(folder, 'Preprocessed.json'), 'w') as file:
-        json.dump(data, file)
+        json.dump(data, file, indent=4)
 
 
 def visualize(data):
     streamlit.markdown('''## Runtime: {}'''.format(data[KEY_RUNTIME]))
 
-    with streamlit.beta_expander('Description'):
+    with streamlit.expander('Description'):
         streamlit.write(data[KEY_LONG_DESSCR])
 
-    with streamlit.beta_expander('Notes'):
+    with streamlit.expander('Notes'):
         streamlit.write(data[KEY_NOTES])
 
-    with streamlit.beta_expander('Hyperparameters'):
+    with streamlit.expander('Hyperparameters'):
         streamlit.write(data[KEY_HYPERPARAMETERS])
 
     for idx, (name, log) in enumerate(data[KEY_LOGS_PROCESSED].items()):
@@ -398,7 +398,7 @@ def visualize(data):
         slider_episodes = False
         slider_frames = False
 
-        c1, c2, c3, c4 = streamlit.beta_columns(4)
+        c1, c2, c3, c4 = streamlit.columns(4)
 
         if c1.button(f'Download High Resolution ID{idx}'):
             download_high_res(name, data[KEY_LOGS_RAW][name])
